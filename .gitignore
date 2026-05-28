@@ -4,8 +4,9 @@ storages/
 catboost_info/
 **ipynb**
 changeslog
-*logger*
-*logs*
+logger/
+logs.log
+logs/
 
 
 
