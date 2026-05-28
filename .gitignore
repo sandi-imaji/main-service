@@ -1,0 +1,11 @@
+.venv/
+**__pycache__**
+storages/
+catboost_info/
+**ipynb**
+changeslog
+*logger*
+*logs*
+
+
+

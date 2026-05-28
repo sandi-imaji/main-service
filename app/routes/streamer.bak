@@ -1,0 +1,543 @@
+"""
+WebSocket Base Class untuk mengurangi code duplication.
+Menyediakan common functionality untuk semua WebSocket handlers.
+"""
+
+from abc import ABC, abstractmethod
+from typing import Callable, Optional, Dict, Any,List
+from fastapi import WebSocket, WebSocketDisconnect
+from sqlmodel import Session
+import asyncio,threading
+import json
+import os
+import datetime
+import loguru
+from app.helpers import parse_log_line, read_logs,DTEncoder
+
+from app.database.db import get_session
+from app.database.orm import Dataset
+from app.logger import Logger
+from app.config import Config
+from websockets.exceptions import ConnectionClosedOK, ConnectionClosedError
+from app.core.time_series import TimeSeries
+
+
+# INI PERLU DIPERBAIKI !!!
+
+
+class BaseWebSocketHandler(ABC):
+  """
+  Base class untuk WebSocket handlers.
+
+  Features:
+  - Automatic connection management
+  - Database session handling
+  - Error handling
+  - Graceful disconnection
+
+  Usage:
+    class MyWebSocketHandler(BaseWebSocketHandler):
+      async def run_loop(self, dataset: Dataset):
+        while self.is_connected:
+          data = await self.process()
+          await self.send(data)
+          await asyncio.sleep(self.interval)
+
+    # In routes
+    @router.websocket("/my_endpoint")
+    async def my_endpoint(websocket: WebSocket, dataset_name: str):
+      handler = MyWebSocketHandler(websocket, dataset_name, interval=5.0)
+      await handler.handle()
+  """
+
+  def __init__(
+      self,
+      websocket: WebSocket,
+      dataset_name: str,
+      interval: float = 5.0,
+      require_dataset: bool = True,
+      require_target: bool = False,
+  ):
+    self.websocket = websocket
+    self.dataset_name = dataset_name
+    self.interval = interval
+    self.require_dataset = require_dataset
+    self.require_target = require_target
+
+    self.db: Optional[Session] = None
+    self.logger: loguru.Logger = Logger(dataset_name)
+    self.dataset: Optional[Dataset] = None
+    self.is_connected = False
+    self.stop_event = threading.Event()
+
+  async def handle(self):
+    """
+    Main entry point. Handles connection setup, validation, dan loop.
+    """
+    await self.websocket.accept()
+    self.is_connected = True
+
+    try:
+      # Create database session
+      self.db = next(get_session())
+
+      # Validate and get dataset
+      if self.require_dataset:
+        if not await self._validate_dataset():
+          return
+
+      # Initialize logger
+      self.logger = Logger(self.dataset_name)
+      self.logger.info(f"WebSocket connected: {self.__class__.__name__}")
+
+      # Run main loop
+      await self.run_loop()
+
+    except WebSocketDisconnect:
+      self.logger.info(
+          "WebSocket disconnected by client"
+      ) if self.logger else None
+    except ConnectionClosedOK:
+      self.logger.info("WebSocket closed normally") if self.logger else None
+    except ConnectionClosedError:
+      self.logger.warning(
+          "WebSocket closed with error") if self.logger else None
+    except Exception as e:
+      if self.logger:
+        self.logger.error(f"Error in WebSocket handler: {e}")
+      await self._send_error(f"Internal error: {str(e)}")
+    finally: await self.cleanup()
+
+  async def _validate_dataset(self) -> bool:
+    """
+    Validate dataset exists dan meets requirements.
+
+    Returns:
+        bool: True if valid, False otherwise
+    """
+    try:
+      self.dataset = Dataset.get_by_name(self.dataset_name, self.db)
+
+      if not self.dataset:
+        await self.websocket.close(code=1008, reason="Dataset not found")
+        return False
+
+      if self.require_target and not self.dataset.target:
+        await self.websocket.close(code=1008, reason="Dataset has no target")
+        return False
+
+      return True
+
+    except Exception as e:
+      await self.websocket.close(code=1011, reason=f"Validation error: {str(e)}")
+      return False
+
+  @abstractmethod
+  async def run_loop(self):
+    """
+    Main processing loop. Must be implemented by subclasses.
+
+    This method should:
+    1. Check self.is_connected periodically
+    2. Process data
+    3. Send results via self.send()
+    4. Sleep for self.interval
+    """
+    pass
+
+  async def send(self, data: Dict[str, Any]):
+    """
+    Send data to WebSocket client.
+
+    Args:
+        data: Data to send (will be JSON serialized)
+    """
+    if not self.is_connected: return
+
+    try: await self.websocket.send_json(data)
+    except (WebSocketDisconnect, ConnectionClosedOK, ConnectionClosedError):
+      self.is_connected = False
+      raise
+    except Exception as e:
+      if self.logger: self.logger.error(f"Failed to send data: {e}")
+      raise
+
+  async def _send_error(self, message: str):
+    """
+    Send error message to client.
+
+    Args: message: Error message
+    """
+    try: await self.websocket.send_json({"error": message})
+    except: pass
+
+  async def receive(self) -> Optional[Dict[str, Any]]:
+    """
+    Receive data from WebSocket client.
+
+    Returns:
+        Received data as dict, or None if error
+    """
+    if not self.is_connected: return None
+
+    try:
+      data = await self.websocket.receive_text()
+      return json.loads(data)
+    except (WebSocketDisconnect, ConnectionClosedOK, ConnectionClosedError):
+      self.is_connected = False
+      raise
+    except json.JSONDecodeError as e:
+      if self.logger: self.logger.error(f"Invalid JSON received: {e}")
+      await self._send_error("Invalid JSON format")
+      return None
+    except Exception as e:
+      if self.logger: self.logger.error(f"Error receiving data: {e}")
+      return None
+
+  async def sleep(self, seconds: Optional[float] = None):
+    """
+    Sleep dengan check untuk disconnect.
+
+    Args:
+        seconds: Seconds to sleep (default: self.interval)
+    """
+    sleep_time = seconds or self.interval
+
+    try: await asyncio.wait_for(self._wait_for_disconnect(), timeout=sleep_time)
+    except asyncio.TimeoutError: pass  # Normal timeout
+
+  async def _wait_for_disconnect(self):
+    """Wait untuk disconnect signal."""
+    while self.is_connected:
+      await asyncio.sleep(0.1)
+
+  async def cleanup(self):
+    """Cleanup resources."""
+    self.is_connected = False
+
+    # Close database session
+    if self.db:
+      try: self.db.close()
+      except: pass
+      self.db = None
+
+    # Close WebSocket
+    try: await self.websocket.close()
+    except: pass
+
+    if self.logger:
+      self.logger.info(f"WebSocket disconnected: {self.__class__.__name__}")
+
+
+class InferenceWebSocketHandler(BaseWebSocketHandler):
+  """
+  WebSocket handler untuk real-time inference.
+
+  Usage:
+    @router.websocket("/inference")
+    async def inference_ws(websocket: WebSocket, dataset_name: str):
+      handler = InferenceWebSocketHandler(
+        websocket,
+        dataset_name,
+        inference_func=my_inference_function
+      )
+      await handler.handle()
+  """
+
+  def __init__(
+      self,
+      websocket: WebSocket,
+      dataset_name: str,
+      inference_func: Callable,
+      interval: float = 5.0,
+      require_dataset: bool = True,
+  ):
+    super().__init__(websocket, dataset_name, interval, require_dataset)
+    self.inference_func = inference_func
+
+  async def run_loop(self):
+    """Run inference loop."""
+    while self.is_connected:
+      try:
+        # Run inference
+        if asyncio.iscoroutinefunction(self.inference_func):
+          results = await self.inference_func(self.dataset, self.logger)
+        else:
+          results = self.inference_func(self.dataset, self.logger)
+
+        if results: await self.send(results.model_dump(mode="json"))
+        else: self.is_connected = False
+
+        await self.sleep()
+
+      except Exception as e:
+        if self.logger:
+          self.logger.error(f"Inference error: {e}")
+        self.is_connected = False
+        await self.sleep()
+
+class ForecastWebSocketHandler(BaseWebSocketHandler):
+  def __init__(
+      self,
+      websocket: WebSocket,
+      dataset_name: str,
+      fetch_func: Callable,
+      dataset: Dataset,
+      interval: float = 30.0,
+      require_dataset: bool = True,
+  ):
+    super().__init__(websocket, dataset_name, interval, require_dataset)
+    self.fetch_func = fetch_func
+    self.dataset = dataset
+  
+  async def handle(self):
+    await self.websocket.accept()
+    self.logger.info(f"Websocket forecast {self.dataset.name} is open")
+    self.is_connected = True
+    if TimeSeries.is_expired(self.dataset,self.logger):
+      self.is_connected = False
+      await self.websocket.close(code=1000,reason="Dataset is Expired, Model is Retraining ...")
+      TimeSeries.retrain(self.dataset,self.logger)
+      return
+    result = TimeSeries.inference(self.dataset,self.logger)
+    await self.websocket.send_json(result.model_dump(mode="json"))
+    try: await self.run_loop(self.dataset.features[0],result.timestamps)
+    except WebSocketDisconnect:
+      await self.websocket.close(code=1000,reason="WebSocketDisconnect")
+      self.logger.info(f"Websocket forecast {self.dataset.name} is close")
+      self.is_connected = False
+
+  async def run_loop(self,feature:str,timestamps: List[datetime.datetime]):
+    """Run value fetching loop."""
+    try:
+      # Fetch value
+      for ts in timestamps:
+        if not self.is_connected: break
+        now = DTEncoder.now()
+
+        if now > ts:
+          continue
+        delay = (ts - now).total_seconds()
+        await asyncio.sleep(delay)
+        value = await self.fetch_func(feature,logger=self.logger)
+        if value is not None:
+          data = {"timestamp": DTEncoder.now().isoformat(), "actual": float(value)}
+          await self.send(data)
+        
+      # while self.is_connected and DTEncoder.now() <= timestamps[-1]:
+      #   now = DTEncoder.now() - datetime.timedelta(seconds=0.1)
+      #   if now in timestamps and self.is_connected:
+      #     value = await self.fetch_func(feature, logger=self.logger)
+      #     if value is not None:
+      #       data = {"timestamp": DTEncoder.now().isoformat(), "actual": float(value)}
+      #       await self.send(data)
+      #   await asyncio.sleep(0.1)
+    except WebSocketDisconnect:
+      await self.websocket.close(code=1000,reason="WebSocketDisconnect")
+      self.logger.info(f"Websocket forecast {self.dataset.name} is close")
+      self.is_connected = False
+    except Exception as e:
+      if self.logger: self.logger.error(f"Fetch error: {e}")
+    finally:
+      self.is_connected = False
+      await self.websocket.close(code=1000,reason="WebSocketDisconnect")
+      self.logger.info(f"Websocket forecast {self.dataset.name} is close")
+
+
+
+
+class AnomalyWebSocketHandler(BaseWebSocketHandler):
+  """
+  WebSocket handler untuk anomaly detection.
+
+  Usage:
+    @router.websocket("/anomaly")
+    async def anomaly_ws(websocket: WebSocket, dataset_name: str):
+      handler = AnomalyWebSocketHandler(
+        websocket,
+        dataset_name,
+        anomaly_func=my_anomaly_function
+      )
+      await handler.handle()
+  """
+
+  def __init__(
+    self,
+    websocket: WebSocket,
+    dataset_name: str,
+    anomaly_func: Callable,
+    interval: float = 5.0,
+    require_dataset: bool = True,
+  ):
+    super().__init__(websocket, dataset_name, interval, require_dataset)
+    self.anomaly_func = anomaly_func
+
+  async def run_loop(self):
+    while self.is_connected and not self.stop_event.is_set():
+      try:
+        # Jalankan blocking function di thread terpisah
+        data = await asyncio.to_thread(self.anomaly_func, self.dataset, self.logger,self.stop_event)
+        if not self.is_connected or self.stop_event.is_set(): break
+        if data: await self.send(data.model_dump(mode="json"))
+        await self.sleep()
+      except Exception as e:
+        if self.logger: self.logger.error(f"Anomaly detection error: {e}")
+        self.is_connected = False
+
+# Asumsikan inherit dari BaseHandler
+class LogWebSocketHandler(BaseWebSocketHandler):
+  # Konstanta untuk readability
+  WS_CLOSE_NOT_FOUND = 1008
+  WS_CLOSE_TIMEOUT = 1011
+  HISTORY_LIMIT = 100
+  TAIL_SLEEP = 0.1
+  HISTORY_SEND_DELAY = 0.001
+  FILE_WAIT_INTERVAL = 1
+
+  def __init__(
+      self,
+      websocket: WebSocket,
+      dataset_name: str,
+      require_dataset: bool = False,
+      max_wait: int = 60,
+  ):
+
+    super().__init__(websocket, dataset_name, self.TAIL_SLEEP, require_dataset)
+    self.max_wait = max_wait
+    self.log_file: Optional[object] = None
+    self.logger: Optional[loguru.Logger] = None
+
+    # Simplified path construction
+    storage_dir = "global" if dataset_name == "system" else dataset_name
+    self.fpath = Config.dir/ "storages"/ storage_dir/ "logs"/ "main.log"
+
+  async def handle(self) -> None:
+    """Handle WebSocket connection for log streaming."""
+    await self.websocket.accept()
+    self.is_connected = True
+    self.logger = Logger("global")
+
+    try:
+      # Single existence check dengan pesan yang jelas
+      if not self.fpath.exists():
+        await self._send_wait_message()
+        if not await self._wait_for_file():
+          return
+
+      await self._send_history()
+      await self._tail_log()
+
+    except Exception as e:
+      self.logger.error(f"Log WebSocket error: {e}")
+      await self.websocket.close(code=1008, reason=str(e))
+    finally:
+      await self.cleanup()
+
+  async def _send_wait_message(self) -> None:
+    """Send notification that we're waiting for log file."""
+    await self.send({
+        "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "level": "INFO",
+        "module": "system",
+        "message": f"Log file not found at {self.fpath}. Waiting for logs...",
+    })
+
+  async def _send_history(self) -> None:
+    """Send last N log entries from history."""
+    try:
+      history = read_logs(self.dataset_name)
+      if not history:
+        return
+
+      for log in history[-self.HISTORY_LIMIT:]:
+        if not self.is_connected:
+          break
+        await self.send(log)
+        await asyncio.sleep(self.HISTORY_SEND_DELAY)
+
+    except Exception as e:
+      self.logger.error(f"Error reading log history: {e}")
+
+  async def _wait_for_file(self) -> bool:
+    """Wait for log file to exist with timeout."""
+    for _ in range(self.max_wait):
+      if self.fpath.exists():
+        return True
+      await asyncio.sleep(self.FILE_WAIT_INTERVAL)
+
+    await self.websocket.close(
+        code=self.WS_CLOSE_TIMEOUT,
+        reason="Timeout waiting for log file"
+    )
+    return False
+
+  async def _tail_log(self) -> None:
+    """Stream log file in real-time with rotation support."""
+    self.log_file = open(self.fpath, "r", encoding="utf-8")
+
+    try:
+      self.log_file.seek(0, 2)  # Seek to end
+      last_ino = os.stat(self.fpath).st_ino
+
+      while self.is_connected:
+        line = self.log_file.readline()
+
+        if line:
+          parsed = parse_log_line(line)
+          if parsed:
+            await self.send(parsed)
+          continue
+
+        # No new line - wait and check rotation
+        await asyncio.sleep(self.TAIL_SLEEP)
+
+        if not await self._handle_rotation_check(last_ino):
+          continue
+
+    except (WebSocketDisconnect, ConnectionClosedOK, ConnectionClosedError):
+      pass  # Client disconnected normally
+    except Exception as e:
+      self.logger.error(f"Log processing error: {e}")
+    finally:
+      self._close_log_file()
+
+  async def _handle_rotation_check(self, last_ino: int) -> bool:
+    """Check for log rotation and reopen file if needed."""
+    try:
+      current_stat = os.stat(self.fpath)
+
+      # File rotated (inode changed)
+      if current_stat.st_ino != last_ino:
+        self.logger.info(f"Log rotation detected for {self.dataset_name}")
+        self._close_log_file()
+        self.log_file = open(self.fpath, "r", encoding="utf-8")
+        return True
+
+      # File truncated - reset to beginning
+      if self.log_file.tell() > current_stat.st_size:
+        self.log_file.seek(0)
+
+      return True
+
+    except FileNotFoundError:
+      await asyncio.sleep(1)
+      return False
+
+  def _close_log_file(self) -> None:
+    """Safely close log file handle."""
+    if self.log_file:
+      try:
+        self.log_file.close()
+      except Exception:
+        pass
+      finally:
+        self.log_file = None
+
+  async def run_loop(self) -> None:
+    """Not used for log handler."""
+    pass
+
+  async def cleanup(self) -> None:
+    """Cleanup resources."""
+    self._close_log_file()
+    await super().cleanup()
