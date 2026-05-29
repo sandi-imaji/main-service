@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from contextlib import asynccontextmanager
 from app.routes import router
 from app.database.orm import Dataset
-from app.database.db import get_session
+from app.database.db import get_session,init_db
 from app.database.schemas import StatusProcess
 from app.config import Config,Verbose
 from app.logger import LOGGER_GLOBAL
@@ -29,6 +29,7 @@ app.add_middleware(
 # Include all routes
 app.include_router(router)
 
+init_db()
 
 if __name__ == "__main__":
   # LOGGER_GLOBAL.debug(Config().connection_str())
@@ -41,5 +42,5 @@ if __name__ == "__main__":
     log_level = 'info'
     access_log = True
 
-  uvicorn.run("server:app", host="0.0.0.0", port=Config.port, reload=True,log_level=log_level,access_log=access_log)
+  uvicorn.run("server:app", host=Config.host, port=Config.port, reload=True,log_level=log_level,access_log=access_log)
 

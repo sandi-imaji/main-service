@@ -194,14 +194,5 @@ class ModelML(SQLModel, table=True):
   def get_by_name(cls, name, db: Session, *fields): return db.exec(
       cls._stmt(*fields).where(cls.name == name)).first()
 
-class Anomaly(SQLModel,table=True):
-  id:int = Field(primary_key=True)
-  dataset_id:int = Field(foreign_key="dataset.id")
-  description:str = Field(nullable=False)
-  algorithm:str = Field(nullable=False)
-  meta:Optional[dict] = Field(default=None,sa_column=Column(JSON))
-  path:str = Field(sa_column=Column(String,default=None))
-  status:str = Field(sa_column=Column())
-
 
 if __name__ == "__main__": pass

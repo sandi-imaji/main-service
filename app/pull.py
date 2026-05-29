@@ -849,6 +849,19 @@ async def async_get_history(
 
   if last_exception: raise ValueError( f"Failed after {max_retries} attempts: {str(last_exception)}")
 
+def query_tagnames(query:str) -> List[str]:
+  """Search tagname from external API using async HTTP client"""
+  url = f"{Config.sl_host}application/api/tags/search.php?search={query}"
+  body = {"authtoken": Config.sl_key}
+  try:
+    res = req.post(url, data=body, timeout=5.0, verify=False)
+    if res.status_code != 200: return []
+    data = res.json().get("data", [])
+    return [item["text"].split(":")[0] for item in data]
+  except Exception as e:
+    print(e)
+    return []
+
 if __name__ == "__main__":
   from app.pull import pulling
 

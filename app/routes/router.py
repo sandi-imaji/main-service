@@ -32,7 +32,7 @@ from app.routes.dataset import (
 )
 
 from app.routes.base import get_model_or_404
-from app.pull import async_get_realtime, pulling, get_realtime
+from app.pull import async_get_realtime, pulling, get_realtime,query_tagnames
 from app.helpers import read_logs
 from app.config import Config
 from app.logger import Logger, LOGGER_GLOBAL
@@ -206,17 +206,18 @@ async def get_pca(name: str, db: Session = Depends(get_session)):
 @dataset_router.get("/utils/tagname")
 async def search_tagname(query: str):
   """Search tagname from external API using async HTTP client"""
-  url = f"{Config.sl_host}application/api/tags/search.php?search={query}"
-  body = {"authtoken": "test"}
-
-  try:
-    res = requests.post(url, data=body, timeout=5.0, verify=False)
-    if res.status_code != 200: return []
-    data = res.json().get("data", [])
-    return [item["text"].split(":")[0] for item in data]
-  except Exception as e:
-    print(e)
-    return []
+  # url = f"{Config.sl_host}application/api/tags/search.php?search={query}"
+  # body = {"authtoken": "test"}
+  #
+  # try:
+  #   res = requests.post(url, data=body, timeout=5.0, verify=False)
+  #   if res.status_code != 200: return []
+  #   data = res.json().get("data", [])
+  #   return [item["text"].split(":")[0] for item in data]
+  # except Exception as e:
+  #   print(e)
+  #   return []
+  return query_tagnames(query)
 
 
 @dataset_router.get("/utils/task-types")
