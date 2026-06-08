@@ -25,7 +25,7 @@ if __name__ == "__main__":
 from pycaret import anomaly as mod
 from app.database.db import get_session
 from app.database.orm import Dataset
-from app.database.schemas import TaskType
+from app.database.schemas import PreprocessingSchema, TaskType
 from app.database.influx import InfluxDBStorage, get_influx_storage
 from app.pull import pull_realtime
 from app.utils.model_cache import get_anomaly_cache
@@ -166,7 +166,7 @@ class Anomaly(BaseMLCore, InferenceMixin):
 
     # Setup and train
     if dataset.preprocessing:
-      args = dataset.preprocessing.to_args_pycaret()
+      args = PreprocessingSchema(**dataset.preprocessing).to_args_pycaret()
       mod.setup(df, verbose=Config.verbose.pycaret,**args)
     else: mod.setup(df, verbose=Config.verbose.pycaret)
     model = mod.create_model(algorithm,fraction=fraction)
