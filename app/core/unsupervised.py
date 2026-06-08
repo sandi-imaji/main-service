@@ -36,8 +36,10 @@ from app.database.schemas import (
 )
 from app.database.orm import Dataset, ModelML
 from app.database.db import get_session
+from app.database.schemas import PreprocessingSchema
 from app.helpers import DTEncoder, pca
-from app.database.influx import InfluxDBStorage
+from sqlmodel import Session
+# from app.database.influx import InfluxDBStorage
 from app.config import Config
 from app.pull import pull_realtime
 from app.utils.model_cache import get_unsupervised_cache
@@ -215,7 +217,10 @@ class Unsupervised(BaseMLCore, InferenceMixin):
     n_clusters = int(dataset.target)
 
     clusters = {}
-    mod.setup(combined_df,ignore_features=["dt"])
+    if dataset.preprocessing:
+      args = PreprocessingSchema(**dataset.preprocessing).to_args_pycaret()
+      mod.setup(combined_df,ignore_features=["dt"],**args)
+    else: mod.setup(combined_df,ignore_features=["dt"])
 
     naming_clusters = Unsupervised.get_naming_clusters(dataset.name)
 
@@ -384,7 +389,7 @@ class Unsupervised(BaseMLCore, InferenceMixin):
 
 
   @staticmethod
-  def find_top_model(dataset_name: str, n_top: int, logger):
+  def find_top_model(dataset:Dataset,n_top: int, logger,db:Session):
     """
     Find and train top N clustering models.
 
@@ -393,145 +398,149 @@ class Unsupervised(BaseMLCore, InferenceMixin):
         n_top: Number of top models to select
         logger: Logger instance
     """
-    with closing(next(get_session())) as db:
-      dataset = Dataset.get_by_name(dataset_name, db)
 
-      if not dataset: raise ValueError("Dataset is not found!")
+    try:
+      task_type = dataset.task_type
+      num_clusters = int(dataset.target)
+      mod = module(task_type)
 
-      try:
-        task_type = dataset.task_type
-        num_clusters = int(dataset.target)
-        mod = module(task_type)
+      df = dataset.open_dataframe()
+      if len(dataset.features) > 2:
+        pca_obj = pca(df[dataset.features].copy(),
+                      n_components=2, only_obj=True)
+        fpath = (
+            Config.dir
+            / "storages"
+            / dataset.name
+            / f"pca.joblib"
+        )
+        joblib.dump(pca_obj, fpath)
+        logger.info("Saved PCA Object...")
 
-        df = dataset.open_dataframe()
-        if len(dataset.features) > 2:
-          pca_obj = pca(df[dataset.features].copy(),
-                        n_components=2, only_obj=True)
-          fpath = (
-              Config.dir
-              / "storages"
-              / dataset.name
-              / f"pca.joblib"
-          )
-          joblib.dump(pca_obj, fpath)
-          logger.info("Saved PCA Object...")
-
-        # Setup PyCaret
+      # Setup PyCaret
+      if dataset.preprocessing:
+        preprocessing = PreprocessingSchema(**dataset.preprocessing)
+        args = preprocessing.to_args_pycaret()
+        mod.setup(df, verbose=Config.verbose.pycaret,ignore_features=["dt"],**args)
+      else:
         mod.setup(df, verbose=Config.verbose.pycaret,
-                  ignore_features=["dt"], preprocess=False)
-        logger.info(f"Features : {mod.get_config('X').columns.tolist()}")
+                  ignore_features=["dt"])
 
-        algorithms = task_type.algorithms()
-        models = []
-        results = []
-        times = {}
+      logger.info(f"Features : {mod.get_config('X').columns.tolist()}")
 
-        # Train models sequentially (PyCaret doesn't support parallel training well)
-        for algo, desc in algorithms.items():
-          tic = time.monotonic()
-          model = mod.create_model(
-              algo, num_clusters=num_clusters, verbose=Config.verbose.pycaret
-          )
-          models.append(model)
+      algorithms = task_type.algorithms()
+      models = []
+      results = []
+      times = {}
 
-          result = mod.pull().copy()
-          result_dict = result.iloc[0].to_dict()
-          result_dict["Algorithm"] = algo
-          result_dict["Description"] = desc
+      # Train models sequentially (PyCaret doesn't support parallel training well)
+      for algo, desc in algorithms.items():
+        tic = time.monotonic()
+        model = mod.create_model(
+            algo, num_clusters=num_clusters, verbose=Config.verbose.pycaret
+        )
+        models.append(model)
 
-          toc = time.monotonic()
-          times[algo] = toc - tic
-          results.append(result_dict)
-          logger.info(f"{algo} successfully trained!")
+        result = mod.pull().copy()
+        result_dict = result.iloc[0].to_dict()
+        result_dict["Algorithm"] = algo
+        result_dict["Description"] = desc
 
-        # Sort by metrics
-        logger.info("Sorting Scores ...")
-        ranked = sorted(
-          results,
-          key=lambda x: (
-            -(
-                x.get("Silhouette", -1e9)
-                if x.get("Silhouette") is not None
-                else -1e9
-            ),
-            -(
-                x.get("Calinski-Harabasz", -1e9)
-                if x.get("Calinski-Harabasz") is not None
-                else -1e9
-            ),
-            (
-                x.get("Davies-Bouldin", 1e9)
-                if x.get("Davies-Bouldin") is not None
-                else 1e9
-            ),
+        toc = time.monotonic()
+        times[algo] = toc - tic
+        results.append(result_dict)
+        logger.info(f"{algo} successfully trained!")
+
+      # Sort by metrics
+      logger.info("Sorting Scores ...")
+      ranked = sorted(
+        results,
+        key=lambda x: (
+          -(
+              x.get("Silhouette", -1e9)
+              if x.get("Silhouette") is not None
+              else -1e9
           ),
+          -(
+              x.get("Calinski-Harabasz", -1e9)
+              if x.get("Calinski-Harabasz") is not None
+              else -1e9
+          ),
+          (
+              x.get("Davies-Bouldin", 1e9)
+              if x.get("Davies-Bouldin") is not None
+              else 1e9
+          ),
+        ),
+      )
+
+      top_model_name = ""
+      for idx, m in enumerate(ranked[:n_top]):
+        key = m["Algorithm"]
+        path = f"storages/{dataset.name}/top_model/{key}"
+        model_path = Config.dir / path
+        mod.save_model(models[idx], str(model_path))
+
+        df[key] = mod.assign_model(models[idx])["Cluster"]
+
+        metric = {
+            k: v
+            for k, v in m.items()
+            if k not in ["Algorithm", "Description"]
+        }
+        metric["TT (Sec)"] = times[key]
+
+        model_name = f"{key}-{str(uuid4())[:8]}"
+
+        meta = MetaModel(
+            created_by="Anonymous",
+            train_time=times[key],
+            created_at=datetime.datetime.now().isoformat(),
+            size_of=os.path.getsize(f"{model_path}.pkl"),
+            notes="",
         )
 
-        top_model_name = ""
-        for idx, m in enumerate(ranked[:n_top]):
-          key = m["Algorithm"]
-          path = f"storages/{dataset.name}/top_model/{key}"
-          model_path = Config.dir / path
-          mod.save_model(models[idx], str(model_path))
+        q_model = ModelML(
+            name=model_name,
+            algorithm=key,
+            is_active=True,
+            evaluation=metric,
+            meta=meta.model_dump(),
+            status=StatusProcess.SUCCESS_TRAIN,
+            path=path,
+        )
+        dataset.models.append(q_model)
 
-          df[key] = mod.assign_model(models[idx])["Cluster"]
+        if idx == 0:
+          top_model_name = model_name
 
-          metric = {
-              k: v
-              for k, v in m.items()
-              if k not in ["Algorithm", "Description"]
-          }
-          metric["TT (Sec)"] = times[key]
+      # Save clusters
+      fpath = Config.dir / "storages" / dataset.name / "results/clusters.csv"
+      naming_clusters = Unsupervised.get_naming_clusters(dataset.name)
+      if naming_clusters: Unsupervised.rename_clusters(df,naming_clusters,True)
 
-          model_name = f"{key}-{str(uuid4())[:8]}"
+      df.to_csv(fpath, index=False)
 
-          meta = MetaModel(
-              created_by="Anonymous",
-              train_time=times[key],
-              created_at=datetime.datetime.now().isoformat(),
-              size_of=os.path.getsize(f"{model_path}.pkl"),
-              notes="",
-          )
+      # Update metadata
+      current_meta = MetaDataset(**dataset.meta)
+      total_train_times = sum(times.values())
+      print(f"Total train times : {total_train_times}")
+      current_meta.train_time = total_train_times
+      dataset.meta = current_meta.model_dump()
+      dataset.top_model = top_model_name
+      dataset.status = StatusProcess.IDLE
 
-          q_model = ModelML(
-              name=model_name,
-              algorithm=key,
-              is_active=True,
-              evaluation=metric,
-              meta=meta.model_dump(),
-              status=StatusProcess.SUCCESS_TRAIN,
-              path=path,
-          )
-          dataset.models.append(q_model)
+      db.commit()
+      logger.info("Compare Models Finished")
 
-          if idx == 0:
-            top_model_name = model_name
+      # Clear cache after training
+      get_unsupervised_cache().clear()
 
-        # Save clusters
-        fpath = Config.dir / "storages" / dataset.name / "results/clusters.csv"
-        naming_clusters = Unsupervised.get_naming_clusters(dataset.name)
-        if naming_clusters: Unsupervised.rename_clusters(df,naming_clusters,True)
-
-        df.to_csv(fpath, index=False)
-
-        # Update metadata
-        current_meta = MetaDataset(**dataset.meta)
-        total_train_times = sum(times.values())
-        print(f"Total train times : {total_train_times}")
-        current_meta.train_time = total_train_times
-        dataset.meta = current_meta.model_dump()
-        dataset.top_model = top_model_name
-        dataset.status = StatusProcess.IDLE
-
-        db.commit()
-        logger.info("Compare Models Finished")
-
-        # Clear cache after training
-        get_unsupervised_cache().clear()
-
-      except Exception as e:
-        logger.error(f"Error in find_top_model: {str(e)}", exc_info=True)
-        db.rollback()
+    except Exception as e:
+      logger.error(f"Error in find_top_model: {str(e)}", exc_info=True)
+      dataset.status = StatusProcess.ERROR_TRAIN
+      db.commit()
+      # db.rollback()
 
   @staticmethod
   def train(dataset: Dataset, algorithm: str, logger):
@@ -546,7 +555,11 @@ class Unsupervised(BaseMLCore, InferenceMixin):
     """
     mod = module(dataset.task_type)
     df = dataset.open_dataframe()
-    mod.setup(df, verbose=Config.verbose.pycaret, ignore_features=["dt"])
+
+    if dataset.preprocessing:
+      args = PreprocessingSchema(**dataset.preprocessing).to_args_pycaret()
+      mod.setup(df, verbose=Config.verbose.pycaret, ignore_features=["dt"],**args)
+    else: mod.setup(df, verbose=Config.verbose.pycaret, ignore_features=["dt"])
 
     model = mod.create_model(
         algorithm, num_clusters=int(dataset.target), verbose=Config.verbose.pycaret

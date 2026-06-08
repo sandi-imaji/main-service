@@ -21,6 +21,7 @@ class StatusProcess(Enum):
   SUCCESS_TRAIN = auto()
   ERROR_TRAIN = auto()
   RUNNING_COMPARE = auto()
+  RUNNING_FINETUNE = auto()
   IDLE = auto()
   ACTIVE = auto()
   PAUSED = auto()  # Proses dihentikan
@@ -28,6 +29,13 @@ class StatusProcess(Enum):
   QUEUED = auto()  # Menunggu antrian
   VALIDATING = auto()  # Memeriksa data / model
 
+  def is_fail(self) -> bool:
+    return self in (StatusProcess.ERROR_PULL,StatusProcess.ERROR_TRAIN,StatusProcess.CANCELLED,StatusProcess.QUEUED)
+
+  def is_normal(self): return self in (self.IDLE,self.ACTIVE)
+
+  def is_waiting(self) -> bool: return "RUNNING" in self.name
+    
   def __str__(self):
     return self.name
 
@@ -193,11 +201,16 @@ class DatasetHandling(StrEnum):
 
 class PreprocessingSchema(BaseModel):
   missing_handling: DatasetHandling = DatasetHandling.NEIGHBOR_VALUE
-  outlier_handling: DatasetHandling = DatasetHandling.NONE
+  outlier_handling: bool = False
   scale: bool = False
   dim_reduce: bool = False
-  interval_finetune: int = 30 # days
-  retention: int = 30# days
+  interval_finetune: int = 5 # days
+  retention: int = 3 # days
+
+  def to_args_pycaret(self) -> dict:
+    pca_components = 2 if self.dim_reduce else None
+    return dict(remove_outliers=self.outlier_handling, normalize=self.scale,pca=self.dim_reduce,pca_components=pca_components)
+
 
 class DatasetRequestSchema(BaseModel):
   description: str = ""
@@ -229,6 +242,7 @@ class DatasetResponseSchema(BaseModel):
   top_model: Optional[str] = None
   models: List[Any] = []
   status: str
+  n_models: int
 
 
 class AnomalyRequestSchema(BaseModel):

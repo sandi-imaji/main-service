@@ -1,6 +1,5 @@
+import pprint
 from app.workers.manager import WorkerManager
-import json
-import asyncio, requests
 from fastapi import Depends, BackgroundTasks, APIRouter, WebSocket, HTTPException, Query, WebSocketDisconnect
 from sqlmodel import Session
 from typing import Callable, List, Dict
@@ -38,7 +37,6 @@ from app.config import Config
 from app.logger import Logger, LOGGER_GLOBAL
 
 from app.routes.streamer import (
-  Streamer,
   anomaly_manager,
   regression_manager,
   clustering_manager,
@@ -123,8 +121,9 @@ async def get_dataset(name: str, db: Session = Depends(get_session)):
   dataset = get_dataset_or_404(name, db)
   task_name = f"{dataset.name}-{dataset.task_type}"
   status = WorkerManager.is_active(task_name)
-  flag = not status
-  WorkerManager.update_flag_dataset(name,flag)
+  if dataset.status.is_normal():
+    flag = not status
+    WorkerManager.update_flag_dataset(name,flag)
   data = dataset.to_response().model_dump()
   data["worker_status"] = status
   return data
@@ -260,12 +259,14 @@ async def auto_initiate(
 
   # Create dataset
   dataset = create_dataset(dataset_payload, db)
+  dataset.n_models = payload.n_models
   dataset.save(db)
 
   LOGGER_GLOBAL.debug(f"Auto-initiating dataset: {dataset.name}")
   background_task.add_task(
-    auto_initialize, dataset=dataset, n_models=payload.n_models
+    auto_initialize, dataset=dataset, n_models=payload.n_models,db=db
   )
+  # pprint.pprint(payload.model_dump())
 
   return payload.model_dump()
 
@@ -361,22 +362,24 @@ async def get_actual_save_forecast(
 
 @model_router.post("/find-top")
 async def find_top_models(
-  payload: FindTopModelRequestSchema,
+  dataset_name: str,
   background_tasks: BackgroundTasks,
   db: Session = Depends(get_session),
 ):
   """Find top performing models"""
-  dataset = get_dataset_or_404(payload.dataset_name, db)
-  if dataset:
-    dataset.check_integrity()
-  background_tasks.add_task(
-    find_top_model, dataset=dataset, n_top=payload.n_top)
+  dataset = get_dataset_or_404(dataset_name, db)
+  logger = Logger(dataset.name)
+  if dataset.is_valid:
+    logger.info(f"Find Top Model : {dataset.name} | n_top : {dataset.n_models}")
+    core = dataset.task_type.core()
+    background_tasks.add_task(core.find_top_model, dataset_name=dataset.name, n_top=dataset.n_models,logger=logger)
+    return {
+      "status": "processing",
+      "message": "Finding top models in background",
+      "dataset": dataset.name,
+    }
+  else: raise HTTPException(status_code=400,detail=f"Dataset is not valid : {dataset.status}")
 
-  return {
-    "status": "processing",
-    "message": "Finding top models in background",
-    "dataset": dataset.name,
-  }
 
 
 @model_router.post("/train")

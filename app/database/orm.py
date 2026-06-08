@@ -5,11 +5,9 @@ from app.database.schemas import (
     TaskType, StatusProcess, ModelResponseSchema, ViewModels
 )
 from sqlalchemy import Boolean, String
+from app.utils.security import safe_path_join
 from typing import Optional, List
-import sqlalchemy as sa
-import pandas as pd
-import os
-import pathlib
+import sqlalchemy as sa,pandas as pd,os, pathlib, datetime
 from app.config import Config
 
 class Dataset(SQLModel, table=True):
@@ -31,6 +29,7 @@ class Dataset(SQLModel, table=True):
   preprocessing: Optional[PreprocessingSchema] = Field(default=None, sa_column=Column(JSON))
   is_valid: bool = Field(sa_column=Column(Boolean), default=False)
   meta: Optional[MetaDataset] = Field(default={}, sa_column=Column(JSON))
+  n_models:int
   # One-to-many ke ModelML
   models: List["ModelML"] = Relationship(back_populates="dataset", sa_relationship_kwargs={
                                          "cascade": "all, delete-orphan"})
@@ -43,7 +42,7 @@ class Dataset(SQLModel, table=True):
                                  features=features, target=target,
                                  start_date=self.start_date, end_date=self.end_date,
                                  meta=self.meta, is_valid=self.is_valid, interval=self.interval,
-                                 status=self.status.name, top_model=self.top_model, models=self.get_models())
+                                 status=self.status.name, top_model=self.top_model, models=self.get_models(),n_models=self.n_models,preprocessing=self.preprocessing)
 
   @classmethod
   def to_responses(cls, datas, db: Session):
@@ -103,7 +102,7 @@ class Dataset(SQLModel, table=True):
     if not self.meta: raise HTTPException(status_code=400, detail="Dataset has no metadata")
 
     # Use secure path joining
-    try: safe_path_join(Config.dir, "storages", dataset.name, "data.csv")
+    try: safe_path_join(Config.dir, "storages", self.name, "data.csv")
     except Exception as e: raise HTTPException(status_code=400, detail=str(e))
 
   @classmethod
@@ -134,6 +133,16 @@ class Dataset(SQLModel, table=True):
     db.exec(delete(cls))
     db.commit()
 
+  def is_time_to_finetune(self) -> bool:
+    now = datetime.datetime.now()
+    current_dt = datetime.datetime.fromisoformat(self.meta.get("current_dt",now.isoformat()))
+    if self.preprocessing:
+      interval_finetune = self.preprocessing['interval_finetune']
+      time_to_finetune = current_dt + datetime.timedelta(days=interval_finetune)
+      if time_to_finetune.date() == now.date() or time_to_finetune.date() < now.date(): return True
+      else: return False
+    else: return False
+
 
 class ModelML(SQLModel, table=True):
   id: int = Field(primary_key=True, nullable=False)
@@ -144,8 +153,7 @@ class ModelML(SQLModel, table=True):
   evaluation: dict = Field(sa_column=Column(JSON))
   finetune: bool = Field(sa_column=Column(Boolean), default=False)
   meta: Optional[dict] = Field(default=None, sa_column=Column(JSON))
-  status: str = Field(sa_column=Column(
-      sa.Enum(StatusProcess), nullable=False, default=StatusProcess.PENDING))
+  status: str = Field(sa_column=Column(sa.Enum(StatusProcess), nullable=False, default=StatusProcess.PENDING))
   path: str = Field(sa_column=Column(String, default=None))
 
   dataset: Dataset = Relationship(back_populates="models")
@@ -191,8 +199,7 @@ class ModelML(SQLModel, table=True):
                 fields): return db.exec(cls._stmt(*fields).where(cls.id == id)).first()
 
   @classmethod
-  def get_by_name(cls, name, db: Session, *fields): return db.exec(
-      cls._stmt(*fields).where(cls.name == name)).first()
+  def get_by_name(cls, name, db: Session, *fields): return db.exec(cls._stmt(*fields).where(cls.name == name)).first()
 
 
 if __name__ == "__main__": pass

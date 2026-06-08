@@ -36,7 +36,7 @@ from app.pull import (
 )
 from app.utils.model_cache import get_timeseries_cache
 from app.database.orm import Dataset, ModelML
-from app.database.db import get_session
+from app.database.db import get_session,Session
 from pycaret import time_series as mod
 from app.config import Config
 from app.logger import Logger,LoggerNone
@@ -576,7 +576,7 @@ class TimeSeries(BaseMLCore, InferenceMixin):
       else: logger.error(f"actuals is not dataframe but {type(actuals)}")
 
   @staticmethod
-  def find_top_model(dataset_name: str, n_top: int, logger):
+  def find_top_model(dataset: Dataset, n_top: int, logger,db:Session):
     """
     Find and train top N time series models.
 
@@ -585,74 +585,70 @@ class TimeSeries(BaseMLCore, InferenceMixin):
       n_top: Number of top models to select
       logger: Logger instance
     """
-    with closing(next(get_session())) as db:
+    try:
       tic = time.monotonic()
-      dataset = Dataset.get_by_name(dataset_name, db)
+      df = dataset.open_dataframe()[dataset.features]
+      fh = int(dataset.target)
 
-      if not dataset: raise ValueError("Dataset is not found!")
+      mod.setup(df, fh=fh, verbose=Config.verbose.pycaret, ignore_features=["dt"])
 
-      try:
-        df = dataset.open_dataframe()[dataset.features]
-        fh = int(dataset.target)
+      top_model = mod.compare_models(
+          n_select=n_top, verbose=Config.verbose.pycaret, include=TimeSeries.TOP_ALGO
+      )
 
-        mod.setup(df, fh=fh, verbose=Config.verbose.pycaret, ignore_features=["dt"])
+      metrics = mod.pull().to_dict("index")
+      keys = list(metrics.keys())
 
-        top_model = mod.compare_models(
-            n_select=n_top, verbose=Config.verbose.pycaret, include=TimeSeries.TOP_ALGO
+      for i in range(n_top):
+        model_name = f"{keys[i]}-{str(uuid4())[:8]}"
+        evaluation = metrics[keys[i]]
+        del evaluation["Model"]
+
+        path_model = f"storages/{dataset.name}/top_model/{keys[i]}"
+        model = mod.finalize_model(top_model[i])
+        mod.save_model(model, path_model)
+
+        meta = MetaModel(
+            created_by="Anonymous",
+            created_at=datetime.datetime.now().isoformat(),
+            size_of=os.path.getsize(f"{Config.dir / path_model}.pkl"),
+            notes="",
         )
 
-        metrics = mod.pull().to_dict("index")
-        keys = list(metrics.keys())
+        q_model = ModelML(
+            name=model_name,
+            algorithm=keys[i],
+            is_active=True,
+            evaluation=evaluation,
+            meta=meta.model_dump(),
+            status=StatusProcess.SUCCESS_TRAIN,
+            path=path_model,
+        )
 
-        for i in range(n_top):
-          model_name = f"{keys[i]}-{str(uuid4())[:8]}"
-          evaluation = metrics[keys[i]]
-          del evaluation["Model"]
+        dataset.models.append(q_model)
+        logger.info(f"Model : {keys[i]} Successfully!")
 
-          path_model = f"storages/{dataset.name}/top_model/{keys[i]}"
-          model = mod.finalize_model(top_model[i])
-          mod.save_model(model, path_model)
+      # Update metadata
+      if isinstance(dataset.meta, dict):
+        current_meta = MetaDataset(**dataset.meta)
+      else:
+        current_meta = dataset.meta
 
-          meta = MetaModel(
-              created_by="Anonymous",
-              created_at=datetime.datetime.now().isoformat(),
-              size_of=os.path.getsize(f"{Config.dir / path_model}.pkl"),
-              notes="",
-          )
+      current_meta.train_time = time.monotonic() - tic
+      dataset.meta = current_meta.model_dump()
+      dataset.top_model = dataset.models[0].name
+      dataset.status = StatusProcess.IDLE
 
-          q_model = ModelML(
-              name=model_name,
-              algorithm=keys[i],
-              is_active=True,
-              evaluation=evaluation,
-              meta=meta.model_dump(),
-              status=StatusProcess.SUCCESS_TRAIN,
-              path=path_model,
-          )
+      db.commit()
+      logger.info("Compare Models Finished!")
 
-          dataset.models.append(q_model)
-          logger.info(f"Model : {keys[i]} Successfully!")
+      # Clear cache after training
+      get_timeseries_cache().clear()
 
-        # Update metadata
-        if isinstance(dataset.meta, dict):
-          current_meta = MetaDataset(**dataset.meta)
-        else:
-          current_meta = dataset.meta
-
-        current_meta.train_time = time.monotonic() - tic
-        dataset.meta = current_meta.model_dump()
-        dataset.top_model = dataset.models[0].name
-        dataset.status = StatusProcess.IDLE
-
-        db.commit()
-        logger.info("Compare Models Finished!")
-
-        # Clear cache after training
-        get_timeseries_cache().clear()
-
-      except Exception as e:
-        logger.error(str(e))
-        db.rollback()
+    except Exception as e:
+      logger.error(str(e))
+      dataset.status = StatusProcess.ERROR_TRAIN
+      db.rollback()
 
   @staticmethod
   def train(dataset: Dataset, algorithm: str, logger):

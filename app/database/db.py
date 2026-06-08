@@ -1,7 +1,7 @@
 import logging
-import os
 from pathlib import Path
 from sqlmodel import SQLModel, create_engine, Session
+from contextlib import contextmanager
 
 from app.database.orm import Dataset, ModelML
 
@@ -29,6 +29,15 @@ def get_session():
   """Dependency untuk mendapatkan session database."""
   with Session(engine) as session:
     yield session
+
+@contextmanager
+def get_db_session():
+  session_gen = get_session()
+  db = next(session_gen)
+  try: yield db
+  finally:
+    try: next(session_gen)  # Tutup generator dengan benar
+    except StopIteration: pass
 
 
 def init_db(drop_existing: bool = False):

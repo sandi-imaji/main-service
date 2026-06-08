@@ -56,16 +56,16 @@ def check_integrity_model(m: Optional[ModelML]):
         status_code=500, detail=f"Model : {m.algorithm} file is not found"
     )
 
-def auto_initialize(dataset: Dataset, n_models: int):
+def auto_initialize(dataset: Dataset, n_models: int,db):
   dataset_name = dataset.name
   logger = Logger(dataset_name)
   logger.info("Initialize ...")
-  pulling(dataset_name)
-  with closing(next(get_session())) as db:
-    dataset = Dataset.get_by_name(dataset_name, db)
-    if dataset and dataset.status == StatusProcess.SUCCESS_PULL: find_top_model(dataset, n_models)
-    else: logger.warning(f"Status : {dataset.status if dataset else 'Not Found'}")
-  logger.info("Success Initialize !")
+  pulling(dataset_name,db)
+  core = dataset.task_type.core()
+  if dataset.is_valid and dataset.status == StatusProcess.SUCCESS_PULL:
+    core.find_top_model(dataset, n_models,logger,db)
+    logger.info("Success Initialize !")
+  else: logger.warning(f"Status : {dataset.status if dataset else 'Not Found'}")
 
 
 def train_model(dataset: Dataset, algorithm: str, db, use_this=False):

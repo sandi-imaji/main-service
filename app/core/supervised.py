@@ -4,10 +4,13 @@ Optimized for performance with model caching and batch inference support.
 Phase 3: Async support dengan unified cache
 """
 
-import pandas as pd,os,time,traceback,sys
 from typing import List, Optional, Dict
 from contextlib import closing
 from pathlib import Path
+from uuid import uuid4
+from pydantic import BaseModel
+from datetime import datetime,timedelta
+import os,pandas as pd,time,sys
 
 if __name__ == "__main__":
   # Get the directory containing this file: app/core/
@@ -27,17 +30,14 @@ from app.database.schemas import (
     MetaDataset,
 )
 from app.database.orm import Dataset, ModelML
-from app.database.db import get_session
+from app.database.db import get_session,Session,get_db_session
+from app.database.schemas import PreprocessingSchema
 from app.helpers import DTEncoder, read_bytes_to_dict
-from app.pull import pull_realtime
+from app.pull import pull_realtime,PullDate,pull_history
 from app.database.influx import InfluxDBStorage, get_influx_storage
 from app.utils.model_cache import get_supervised_cache
 from app.config import Config
 from app.core.base import BaseMLCore, InferenceMixin,ResultSchema
-from uuid import uuid4
-
-from pydantic import BaseModel
-from datetime import datetime
 from app.logger import Logger,LoggerNone
 
 
@@ -201,6 +201,9 @@ class Supervised(BaseMLCore, InferenceMixin):
     logger.info("start auto inference write loop ...")
     try:
       while True:
+        if dataset.is_time_to_finetune(): 
+          logger.info("it's Time to finetune Dataset :) ")
+          Supervised.finetune(dataset.name,logger)
         results = Supervised.auto_inference(dataset=dataset,logger=logger)
         if not results.is_valid: continue
         logger.info(f" Writing to InfluxDB...")
@@ -265,7 +268,7 @@ class Supervised(BaseMLCore, InferenceMixin):
 
 
   @staticmethod
-  def find_top_model(dataset_name: str, n_top: int, logger):
+  def find_top_model(dataset: Dataset, n_top: int, logger,db:Session):
     """
     Find and train top N models using PyCaret compare_models.
 
@@ -275,19 +278,25 @@ class Supervised(BaseMLCore, InferenceMixin):
         logger: Logger instance
     """
     n_top = 2
-    with closing(next(get_session())) as db:
-      dataset = Dataset.get_by_name(dataset_name, db)
+    try:
+      tic = time.monotonic()
+      task_type = dataset.task_type
+      mod = module(task_type)
+      df = dataset.open_dataframe()
 
-      if not dataset:
-        raise ValueError("Dataset is not found!")
-
-      try:
-        tic = time.monotonic()
-        task_type = dataset.task_type
-        mod = module(task_type)
-        df = dataset.open_dataframe()
-
-        # Setup PyCaret
+      # Setup PyCaret
+      if dataset.preprocessing:
+        preprocessing = PreprocessingSchema(**dataset.preprocessing)
+        args = preprocessing.to_args_pycaret()
+        mod.setup(
+            df,
+            target=dataset.target,
+            verbose=Config.verbose.pycaret,
+            ignore_features=["dt"],
+            n_jobs=1,
+            **args
+        )
+      else:
         mod.setup(
             df,
             target=dataset.target,
@@ -295,61 +304,164 @@ class Supervised(BaseMLCore, InferenceMixin):
             ignore_features=["dt"],
             n_jobs=1
         )
-        get_config(mod, logger)
+      get_config(mod, logger)
 
-        # Compare and select top models
-        top_model = mod.compare_models(n_select=n_top, verbose=Config.verbose.pycaret)
-        metrics = mod.pull().to_dict("index")
-        keys = list(metrics.keys())
+      # Compare and select top models
+      top_model = mod.compare_models(n_select=n_top, verbose=Config.verbose.pycaret)
+      metrics = mod.pull().to_dict("index")
+      keys = list(metrics.keys())
 
-        for i in range(n_top):
-          model_name = f"{keys[i]}-{str(uuid4())[:8]}"
-          evaluation = metrics[keys[i]]
-          del evaluation["Model"]
+      for i in range(n_top):
+        model_name = f"{keys[i]}-{str(uuid4())[:8]}"
+        evaluation = metrics[keys[i]]
+        del evaluation["Model"]
 
-          path_model = f"storages/{dataset.name}/top_model/{keys[i]}"
-          model = mod.finalize_model(top_model[i])
-          mod.save_model(model, str(Config.dir / path_model))
+        path_model = f"storages/{dataset.name}/top_model/{keys[i]}"
+        model = mod.finalize_model(top_model[i])
+        mod.save_model(model, str(Config.dir / path_model))
 
-          logger.info(f"Save Model at {Config.dir / path_model}")
+        logger.info(f"Save Model at {Config.dir / path_model}")
 
-          meta = MetaModel(
-              created_by="Anonymous",
-              created_at=DTEncoder.now().isoformat(),
-              train_time=0.0,
-              size_of=os.path.getsize(f"{Config.dir}/{path_model}.pkl"),
-              notes="",
-          )
+        meta = MetaModel(
+            created_by="Anonymous",
+            created_at=DTEncoder.now().isoformat(),
+            train_time=0.0,
+            size_of=os.path.getsize(f"{Config.dir}/{path_model}.pkl"),
+            notes="",
+        )
 
-          q_model = ModelML(
-              name=model_name,
-              algorithm=keys[i],
-              is_active=True,
-              evaluation=evaluation,
-              meta=meta.model_dump(),
-              status=StatusProcess.SUCCESS_TRAIN,
-              path=path_model,
-          )
-          dataset.models.append(q_model)
-          logger.info(f"Model : {keys[i]} Successfully !")
+        q_model = ModelML(
+            name=model_name,
+            algorithm=keys[i],
+            is_active=True,
+            evaluation=evaluation,
+            meta=meta.model_dump(),
+            status=StatusProcess.SUCCESS_TRAIN,
+            path=path_model,
+        )
+        dataset.models.append(q_model)
+        logger.info(f"Model : {keys[i]} Successfully !")
 
-        dataset.top_model = dataset.models[0].name
-        dataset.status = StatusProcess.IDLE
+      dataset.top_model = dataset.models[0].name
+      dataset.status = StatusProcess.IDLE
 
-        toc = time.monotonic()
-        meta = MetaDataset(**dataset.meta)
-        meta.train_time = toc - tic
-        dataset.meta = meta.model_dump()
+      toc = time.monotonic()
+      meta = MetaDataset(**dataset.meta)
+      meta.train_time = toc - tic
+      dataset.meta = meta.model_dump()
 
+      db.commit()
+      logger.info("Compare Models Finished!")
+
+      # Clear model cache after training new models
+      get_model_cache().clear()
+
+    except Exception as e:
+      logger.error(str(e))
+      dataset.status = StatusProcess.ERROR_TRAIN
+      db.commit()
+      db.rollback()
+
+  @staticmethod
+  def finetune(dataset_name:str,logger):
+    logger.info("start finetune ...")
+    try:
+      with get_db_session() as db:
+        dataset = Dataset.get_by_name(dataset_name,db)
+        if not dataset: raise ValueError("Dataset is not found!")
+        status_before = dataset.status
+        dataset.status = StatusProcess.RUNNING_FINETUNE
+        logger.debug(f"Update Dataset Status to : {StatusProcess.RUNNING_FINETUNE}")
         db.commit()
-        logger.info("Compare Models Finished!")
+        
+        now = DTEncoder.now()
+        if dataset.meta.get('current_dt',False): current_dt = datetime.fromisoformat(dataset.meta['current_dt'])
+        else: current_dt = now
 
-        # Clear model cache after training new models
-        get_model_cache().clear()
+        current_dt = current_dt + timedelta(minutes=dataset.interval)
+        if dataset.preprocessing:
+          interval_finetune = dataset.preprocessing['interval_finetune']
+        else: interval_finetune = 2
 
-      except Exception as e:
-        logger.error(str(e))
-        db.rollback()
+        n_out = interval_finetune // 2
+        df_before = dataset.open_dataframe()
+
+        columns = dataset.meta['columns']
+        columns.remove('dt')
+        start_dt_pull = PullDate.from_dt(current_dt)
+        end_dt_pull = PullDate.from_dt(now)
+        end_dt_pull.time_start = "00:00:00"
+        
+        if dataset.preprocessing: preprocessing = PreprocessingSchema(**dataset.preprocessing)
+        else: preprocessing = PreprocessingSchema()
+
+        df_new = pull_history(columns=columns,start_date=start_dt_pull,
+                                end_date=end_dt_pull,logger=logger,preprocessing=preprocessing)
+        all_data = pd.concat([df_before,df_new]).sort_values(by="dt").reset_index(drop=True)
+
+
+        # # Truncate
+        start_date = DTEncoder.str_to_dt(dataset.start_date) + timedelta(days=n_out)
+        filtered_df = all_data[(all_data['dt'] >= pd.Timestamp(start_date.date(), tz='UTC'))\
+                                & (all_data['dt'] <= pd.Timestamp(now.date(), tz='UTC'))].drop_duplicates(subset=["dt"])
+
+        # # Train 
+        mod = dataset.task_type.module()
+
+        cache = get_model_cache()
+        preprocessing_args = preprocessing.to_args_pycaret()
+        mod.setup(filtered_df,target=dataset.target,verbose=Config.verbose.pycaret,ignore_features=["dt"],
+                  **preprocessing_args)
+
+        for m in dataset.models:
+          model = mod.create_model(m.algorithm,verbose=Config.verbose.pycaret)
+          metric = mod.pull().loc["Mean"].to_dict()
+          model = mod.finalize_model(model)
+
+          path_model = f"storages/{dataset.name}/top_model/{m.algorithm}"
+
+          if os.path.exists(Config.dir / path_model):
+            os.remove(Config.dir / path_model)
+            logger.info(f"Delete Model Previous : {m.algorithm}")
+            cache.invalidate(str(Config.dir / path_model))
+
+          mod.save_model(model, str(Config.dir / path_model))
+          logger.info(
+              f"Save Model Update: {m.algorithm} at {Config.dir / path_model}"
+          )
+
+          model_meta = MetaModel(
+              created_by="Anonymous",
+              last_update=datetime.now().isoformat(),
+              created_at=m.meta.get("created_at", "")
+              if isinstance(m.meta, dict)
+              else getattr(m.meta, "created_at", ""),
+              size_of=os.path.getsize(f"{Config.dir}/{path_model}.pkl"),
+              notes=f"Update {datetime.now().isoformat()}",
+          )
+
+          m.evaluation = metric
+          m.meta = model_meta.model_dump()
+          db.commit()
+          logger.info(f"Model Update : {m.algorithm} Successfully")
+
+        dataset.start_date = DTEncoder.dt_to_str(start_date)
+        dataset.end_date = DTEncoder.dt_to_str(now)
+
+        dataset_meta = MetaDataset(**dataset.meta)
+        print(dataset_meta)
+        dataset_meta.current_dt = now.isoformat()
+        dataset_meta.last_update = now.isoformat()
+        dataset.meta = dataset_meta.model_dump()
+        dataset.status = status_before
+        db.commit()
+
+        filtered_df.to_csv(str(Config.dir/"storages"/dataset.name/"data.csv"),index=False)
+        logger.info(f"Dataset {dataset.name} Successfully Finetune!")
+        get_supervised_cache().clear()
+
+    except Exception as e: logger.error(f"Error Finetune : {e}")
+
 
   @staticmethod
   def train(dataset: Dataset, algorithm: str, logger):
@@ -363,11 +475,11 @@ class Supervised(BaseMLCore, InferenceMixin):
     """
     mod = module(dataset.task_type)
     df = dataset.open_dataframe()
-
-    mod.setup(
-        df, target=dataset.target, verbose=Config.verbose.pycaret, ignore_features=[
-            "dt"]
-    )
+    
+    if dataset.preprocessing:
+      args = PreprocessingSchema(**dataset.preprocessing).to_args_pycaret()
+      mod.setup( df, target=dataset.target, verbose=Config.verbose.pycaret, ignore_features=["dt"],**args)
+    else: mod.setup( df, target=dataset.target, verbose=Config.verbose.pycaret, ignore_features=["dt"])
     get_config(mod, logger)
 
     model = mod.create_model(algorithm, verbose=Config.verbose.pycaret)

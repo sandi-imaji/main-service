@@ -165,7 +165,10 @@ class Anomaly(BaseMLCore, InferenceMixin):
     fpath = Config.dir / "storages" / dataset.name
 
     # Setup and train
-    mod.setup(df, verbose=Config.verbose.pycaret)
+    if dataset.preprocessing:
+      args = dataset.preprocessing.to_args_pycaret()
+      mod.setup(df, verbose=Config.verbose.pycaret,**args)
+    else: mod.setup(df, verbose=Config.verbose.pycaret)
     model = mod.create_model(algorithm,fraction=fraction)
 
     # Assign labels and save results

@@ -320,9 +320,13 @@ def get_history(
 # NOTE:  Raw Parameter
 def pull_history(
   columns: List, start_date: PullDate, end_date: PullDate, logger,preprocessing:PreprocessingSchema) -> pd.DataFrame:
-  start_dt = DTEncoder.str_to_dt(start_date.current_date)
+  """
+  untuk saat ini, preprocessing pada saat pulling hanya impute miss value!
+  """
+
   end_dt = DTEncoder.str_to_dt(end_date.current_date)
-  if start_date.time_start.split(":")[0] > end_date.time_end.split(":")[0]: raise ValueError("Start (Hours) > End (Hours)")
+  start_dt = DTEncoder.str_to_dt(start_date.current_date)
+  # if start_date.time_start.split(":")[0] > end_date.time_end.split(":")[0]: raise ValueError("Start (Hours) > End (Hours)")
   if start_dt.timestamp() > end_dt.timestamp(): raise ValueError("End Date < Start Date !")
 
   delta_days = (end_dt - start_dt).days
@@ -388,11 +392,7 @@ def pull_history(
       results,
   )
   # Miss Values
-  print(preprocessing.missing_handling)
   if df.isna().sum().sum() and preprocessing.missing_handling != DatasetHandling.NONE: df = miss_val_handling_df(df,logger,preprocessing.missing_handling)
-
-  # Outlier
-  if preprocessing.outlier_handling != DatasetHandling.NONE: raise NotImplementedError("Outlier belum implementasi!")
 
   n_rows, n_cols = df.shape
   logger.info(f"Number of Rows : {n_rows} | Number of Cols : {n_cols}")
@@ -441,7 +441,7 @@ def pull_realtime(columns: list, logger=None):
 
   return values
 
-def pulling(dataset_name: str):
+def pulling(dataset_name: str,db):
   """
   function ini untuk pulling dari Dataset (orm)
   """
@@ -452,7 +452,6 @@ def pulling(dataset_name: str):
 
   pull_time = 0
 
-  db = next(get_session())
   dataset = Dataset.get_by_name(dataset_name, db)
   if not dataset:
     raise ValueError(f"{dataset_name} not found!")
@@ -521,7 +520,7 @@ def pulling(dataset_name: str):
     dataset.meta = MetaDataset(
         created_at=datetime.now().isoformat(),
         created_by="Anonymous",
-        current_dt=str(current_dt),
+        current_dt=current_dt.isoformat(),
         size_of=df.memory_usage().sum(),
         n_rows=n_rows,
         pulling_time=pull_time,
@@ -546,12 +545,15 @@ def pulling(dataset_name: str):
 
     logger.info("End Pulling ...")
     db.commit()
-    db.refresh(dataset)
+    # db.refresh(dataset)
     logger.info("Pulled successfully!")
 
   except Exception as e:
     logger.error(f"Dataset: {dataset_name} | Error: {str(e)}")
     dataset.is_valid = False
+    dataset.status = StatusProcess.ERROR_PULL
+    db.commit()
+    # db.refresh()
 
 # =============================================================================
 # Async Versions (Non-blocking)

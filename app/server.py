@@ -10,7 +10,7 @@ from app.database.db import get_session,init_db
 from app.database.schemas import StatusProcess
 from app.config import Config,Verbose
 from app.logger import LOGGER_GLOBAL
-import uvicorn
+import uvicorn,os
 from fastapi.middleware.cors import CORSMiddleware
 
 # Create FastAPI app
@@ -29,11 +29,12 @@ app.add_middleware(
 # Include all routes
 app.include_router(router)
 
-init_db()
-
 if __name__ == "__main__":
   # LOGGER_GLOBAL.debug(Config().connection_str())
   # LOGGER_GLOBAL.debug(Config().debug_str())
+  rtdb_path = Config.dir/"storages/rtdb/data.db"
+  if rtdb_path.exists():
+    init_db()
 
   if Config.verbose == Verbose.SILENT:
     log_level = "critical"
