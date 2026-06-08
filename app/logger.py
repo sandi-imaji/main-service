@@ -39,26 +39,26 @@ def Logger(dataset_name: str):
   # Hapus semua handler default loguru
   log.remove()
   
-  # === Console handler jika VERBOSE=1 ===
+  # === File handler ===
   log.add(
-      sys.stdout,
-      level=Config.verbose.log_level(),
-      format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>",
-      colorize=True,
+      log_path,
+      format="[{time:YYYY-MM-DD HH:mm:ss}] [{level}] {name}:{function}:{line} - {message}",
+      rotation="5 MB",
+      retention=3,
+      level="INFO",
+      colorize=False,
+      buffering=1,
   )
 
-  if not Config.verbose == Verbose.SILENT:
-    # === File handler ===
-    log.add(
-        log_path,
-        format="[{time:YYYY-MM-DD HH:mm:ss}] [{level}] {name}:{function}:{line} - {message}",
-        rotation="5 MB",
-        retention=3,
-        level="INFO",
-        colorize=False,
-        buffering=1,
-    )
 
+  if not Config.verbose == Verbose.SILENT:
+    # === Console handler jika VERBOSE=1 ===
+    log.add(
+        sys.stdout,
+        level=Config.verbose.log_level(),
+        format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>",
+        colorize=True,
+    )
   return log
 
 
