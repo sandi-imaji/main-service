@@ -853,7 +853,7 @@ async def async_get_history(
 
 def query_tagnames(query:str) -> List[str]:
   """Search tagname from external API using async HTTP client"""
-  url = f"{Config.sl_host}application/api/tags/search.php?search={query}"
+  url = f"{Config.sl_host}application/api/tags/search.php?search={query}&modbus_only=1"
   body = {"authtoken": Config.sl_key}
   try:
     res = req.post(url, data=body, timeout=Config.sl_timeout, verify=False)
