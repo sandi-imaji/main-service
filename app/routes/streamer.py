@@ -176,7 +176,7 @@ class Streamer:
     if check_model_exists and model_path:
       fpath = Config.dir / "storages" / self.dataset.name / model_path
       if not fpath.exists():
-        LOGGER_GLOBAL.error(f"Model not found for {self.dataset_name}")
+        LOGGER_GLOBAL.error(f"Model not found for {self.dataset_name} | model_path : {model_path}")
         await self._close_safe(1000, f"Anomaly Model is not found!")
         return
 
@@ -195,7 +195,7 @@ class Streamer:
             try:
               result = await asyncio.wait_for(
                 asyncio.to_thread(inference_func, self.dataset, logger),
-                timeout=60.0  # Timeout 60 detik untuk inference
+                timeout=120.0  # Timeout 60 detik untuk inference
               )
               prediction_data = result.model_dump(mode="json")
             except asyncio.TimeoutError:

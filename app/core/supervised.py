@@ -170,8 +170,9 @@ class Supervised(BaseMLCore, InferenceMixin):
         pulled_list = pulled[columns].values.flatten().tolist()
       else:
         pulled_list = pull_realtime(columns, logger)
-
-      if not all(pulled_list):
+      
+      # NOTE: mungkin nanti bisa menggunakan logic checking 'all values is None'
+      if sum(pulled_list) == 0:
         actual = 0
         algorithm = [m.algorithm for m in dataset.models]
         result = {k:0.0 for k in algorithm}

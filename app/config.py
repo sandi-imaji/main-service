@@ -37,6 +37,9 @@ class Config:
   sl_host: str = os.environ.get("SL_HOST", "http://127.0.0.1")
   sl_key: str = os.environ.get("SL_KEY", "")
   sl_token: str = os.environ.get("SL_TOKEN","")
+  sl_retry:int = int(os.environ.get("SL_RETRY",2))
+  sl_timeout: int = int(os.environ.get("SL_TIMEOUT",5))
+
   url: str = "https://10.3.13.1/beta2/application/api"
   key: str = os.environ.get("SL_KEY", "")
   verbose = Verbose(int(os.environ.get("VERBOSE", 1)))
@@ -83,7 +86,29 @@ class Config:
     print(f"IP : {self.sl_host}")
     print(f"TOKEN : {self.sl_token}")
     print(f"KEY : {self.sl_key}")
-
+  
+  @staticmethod
+  def export() -> dict:
+    return dict(sl_host=Config.sl_host,
+                sl_key=Config.sl_key,
+                sl_token=Config.sl_token,
+                sl_retry=Config.sl_retry,
+                sl_timeout=Config.sl_timeout,
+                influxdb_token=Config.influxdb_token,
+                influxdb_org=Config.influxdb_org,
+                influxdb_bucket=Config.influxdb_bucket)
+  
+  @staticmethod
+  def import_data(data:dict):
+    data = data["data"]
+    Config.sl_host = data['sl_host']
+    Config.sl_key = data['sl_key']
+    Config.sl_token = data['sl_token']
+    Config.sl_retry = data['sl_retry']
+    Config.sl_timeout = data['sl_timeout']
+    Config.influxdb_token = data['influxdb_token']
+    Config.influxdb_org = data['influxdb_org']
+    Config.influxdb_bucket = data['influxdb_bucket']
 
 COLOR_MAP: dict = {
     "DEBUG": "\033[36m",  # Cyan
@@ -94,7 +119,8 @@ COLOR_MAP: dict = {
     "RESET": "\033[0m",
 }
 
-
-
 if __name__ == "__main__":
-  print(Config.influxdb_token)
+  data = Config.export()
+  data['sl_host'] = "100"
+  Config.import_data(data)
+  print(Config.export())

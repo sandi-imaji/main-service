@@ -71,9 +71,9 @@ class PullDate(BaseModel):
 def get_realtime(
     tagname: str,
     logger=None,
-    max_retries: int = 2,
+    max_retries: int = Config.sl_retry,
     retry_delay: float = 0.5,
-    timeout: int = 5,
+    timeout: int = Config.sl_timeout,
 ):
   """
   Get realtime value for a data point with automatic retry on timeout and connection errors.
@@ -187,10 +187,10 @@ def get_history(
   interval: int = 1,
   to_dataframe: bool = False,
   logger=None,
-  max_retries: int = 3,
+  max_retries: int = Config.sl_retry,
   retry_delay: float = 0.7,
   quality: int = 0,
-  timeout: int = 3,
+  timeout: int = Config.sl_timeout,
 ) -> Union[List,pd.DataFrame]:
   """
   Retrieve historical data with automatic retry on timeout and connection errors.
@@ -562,9 +562,9 @@ def pulling(dataset_name: str,db):
 async def async_get_realtime(
     tagname: str,
     logger=None,
-    max_retries: int = 2,
+    max_retries: int = Config.sl_retry,
     retry_delay: float = 0.5,
-    timeout: int = 5,
+    timeout: int = Config.sl_timeout,
 ) -> float:
   """
   Async version of get_realtime - Get realtime value without blocking event loop.
@@ -717,10 +717,10 @@ async def async_get_history(
     interval: int = 5,
     to_dataframe: bool = False,
     logger=None,
-    max_retries: int = 3,
+    max_retries: int = Config.sl_retry,
     retry_delay: float = 0.7,
     quality: int = 0,
-    timeout: int = 10,
+    timeout: int = Config.sl_timeout,
 ):
   """
   Async version of get_history - Retrieve historical data without blocking.
@@ -856,7 +856,7 @@ def query_tagnames(query:str) -> List[str]:
   url = f"{Config.sl_host}application/api/tags/search.php?search={query}"
   body = {"authtoken": Config.sl_key}
   try:
-    res = req.post(url, data=body, timeout=5.0, verify=False)
+    res = req.post(url, data=body, timeout=Config.sl_timeout, verify=False)
     if res.status_code != 200: return []
     data = res.json().get("data", [])
     return [item["text"].split(":")[0] for item in data]

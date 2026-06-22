@@ -42,7 +42,7 @@ def get_row_id(tagname: str,logger=None) -> str:
 
 def get_curr_value(tagname: str):
   url = f"{Config.sl_host}application/api/modbus/get-point?tagname={tagname}"
-  data = req.post(url=url, verify=False, data=dict(key=Config.sl_key))
+  data = req.post(url=url, verify=False, data=dict(key=Config.sl_key),timeout=Config.sl_timeout)
   if data.status_code != 200: return ""
   else: return data.json()["data"]["currvalue"]
 
@@ -318,11 +318,13 @@ def miss_val_handling_df(df: pd.DataFrame, logger, handling):
   logger.info(f"number of rows : {len(df)}")
   for key in miss_values:
     if miss_values[key] != 0:
+      missing_dt = df.loc[df[key].isna(), "dt"]
       tagname = key if key != "dt" else "dt"
       m = miss_values[key]
       percentage = f"{round(m / len(df), 4) * 100}%"
       logger.warning(
-          f"Found Missing Values in {tagname}[{key}] : {m} | percentage : {percentage}"
+        f"Found Missing Values in {tagname}[{key}] : {m} | dt_min : {missing_dt.min()} | dt_max : {missing_dt.max()}\
+        percentage : {percentage}"
       )
       if handling == "NONE":
         logger.warning(f"Handle Missing Value : {handling}")

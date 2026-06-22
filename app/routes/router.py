@@ -737,3 +737,12 @@ async def get_clusters_unique(dataset_name: str, db: Session = Depends(get_sessi
 async def get_actual_point(tagname:str):
   data = get_realtime(tagname,logger=LOGGER_GLOBAL)
   return {"value":data}
+
+@utils_router.get("/config")
+async def get_config():
+  return Config.export()
+
+@utils_router.post("/config")
+async def post_config(data:dict):
+  Config.import_data(data)
+  return data
