@@ -14,6 +14,7 @@ from app.pull import (
     async_pull_realtime,
     get_history,
     async_get_history,
+    query_tagnames
 )
 from app.pull import PullDate
 from app.helpers import DTEncoder
@@ -25,7 +26,6 @@ def load_test_tagnames():
   csv_path = Path(__file__).parent /"tagname.csv"
   df = pd.read_csv(csv_path)
   return df["tagname"].tolist()
-
 
 # Load tagnames once for all tests
 TEST_TAGNAMES = load_test_tagnames()
@@ -223,6 +223,14 @@ class TestPullHistory:
 
   start_date = None
   end_date = None
+
+class TestQueryTagnames:
+  def test_query_tagname(self):
+    tagname = "CRAH*SUPPLY"
+    tagnames = query_tagnames(tagname)
+    assert tagnames, f"Tagname : {tagname} is empty!"
+    assert len(tagnames),f"Tagname : {tagname} is empty!"
+    print(f"n tagnames : {len(tagnames)}")
 
 class TestPerformanceComparison:
   """Performance tests comparing sync vs async operations."""
