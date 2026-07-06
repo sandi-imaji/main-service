@@ -106,10 +106,8 @@ async def active_dataset(db: Session = Depends(get_session)):
 @dataset_router.get("/filter/{task_type}", response_model=dict)
 async def filter_by_task_type(task_type: str, db: Session = Depends(get_session)):
   """Filter datasets by task type"""
-  try:
-    TaskType.from_str(task_type)
-  except:
-    raise ValidationException(f"Invalid task type: {task_type}")
+  try: TaskType.from_str(task_type)
+  except: raise ValidationException(f"Invalid task type: {task_type}")
 
   datasets = Dataset.get_by_task_type(task_type, db)
   return Dataset.to_responses(datasets or [], db)
@@ -127,6 +125,12 @@ async def get_dataset(name: str, db: Session = Depends(get_session)):
   data = dataset.to_response().model_dump()
   data["worker_status"] = status
   return data
+
+@dataset_router.get("/{name}/status", response_model=dict)
+async def get_dataset_status(name: str, db: Session = Depends(get_session)):
+  """Get dataset status by name"""
+  dataset = get_dataset_or_404(name, db)
+  return {"status_code":dataset.status,"status_name":dataset.status.name}
 
 
 @dataset_router.post("", response_model=dict)
@@ -247,7 +251,7 @@ async def get_logs(name: str):
 
 
 @model_router.post("/auto-initiate")
-@with_logging("auto_initiate")
+# @with_logging("auto_initiate")
 async def auto_initiate(
   payload: InitiateRequestSchema,
   background_task: BackgroundTasks,
@@ -268,7 +272,7 @@ async def auto_initiate(
   )
   # pprint.pprint(payload.model_dump())
 
-  return payload.model_dump()
+  return dataset.to_response()
 
 
 # ============================================================================

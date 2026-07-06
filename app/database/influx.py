@@ -18,6 +18,7 @@ from influxdb_client.client.influxdb_client import InfluxDBClient
 from influxdb_client.client.write.point import Point
 from influxdb_client.client.write_api import SYNCHRONOUS
 from influxdb_client.domain.write_precision import WritePrecision
+from influxdb_client.rest import ApiException
 
 from app.config import Config
 from app.logger import Logger
@@ -56,6 +57,20 @@ class InfluxDBStorage:
   - timeseries: value=forecast_value, actual=None
   - anomaly: value=anomaly_score, actual=None
   """
+
+  def check_auth(self) -> bool:
+    """
+    Checking Token without org!
+    """
+    try:
+      buckets_api = self.client.buckets_api()
+      # buckets = buckets_api.find_buckets()
+      buckets_api.find_buckets()
+      # for bucket in buckets.buckets:
+      #   print(bucket.name)
+      # print("")
+      return True
+    except ApiException: return False
 
   def __init__(
       self,
@@ -186,6 +201,8 @@ class InfluxDBStorage:
     except Exception as e:
       self.logger.error(f"Failed to write inference: {e}")
       return False
+
+  def query(self,query:str): return self.query_api.query(query)
 
   def query_inference(
       self,
