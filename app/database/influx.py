@@ -18,6 +18,7 @@ from influxdb_client.client.influxdb_client import InfluxDBClient
 from influxdb_client.client.write.point import Point
 from influxdb_client.client.write_api import SYNCHRONOUS
 from influxdb_client.domain.write_precision import WritePrecision
+from influxdb_client.domain.bucket_retention_rules import BucketRetentionRules
 from influxdb_client.rest import ApiException
 
 from app.config import Config
@@ -57,15 +58,17 @@ class InfluxDBStorage:
   - timeseries: value=forecast_value, actual=None
   - anomaly: value=anomaly_score, actual=None
   """
+  TIME_START = "1970-01-01T00:00:00Z"
+  TIME_END = "2100-01-01T00:00:00Z"
 
   def check_auth(self) -> bool:
     """
     Checking Token without org!
     """
     try:
-      buckets_api = self.client.buckets_api()
+      buckets_api = self.buckets_api()
       # buckets = buckets_api.find_buckets()
-      buckets_api.find_buckets()
+      buckets_api.find_buckets(self.bucket)
       # for bucket in buckets.buckets:
       #   print(bucket.name)
       # print("")
@@ -89,15 +92,30 @@ class InfluxDBStorage:
       raise ValueError(
           "InfluxDB token required. Set INFLUXDB_TOKEN env var or Config.influxdb_token"
       )
-
     try:
       self.client = InfluxDBClient(url=url, token=token, org=self.org)
       self.write_api = self.client.write_api(write_options=SYNCHRONOUS)
       self.query_api = self.client.query_api()
+      self.buckets_api = self.client.buckets_api()
       self.logger.info(f"InfluxDB connected: {url}")
     except Exception as e:
       self.logger.error(f"Failed to connect InfluxDB: {e}")
       raise
+
+  def update_retention(self,nday:int):
+    bucket = self.buckets_api.find_bucket_by_name(self.bucket)
+    bucket.retention_rules = [
+      BucketRetentionRules(
+          type="expire",
+          every_seconds=nday * 24 * 3600
+      )
+    ]
+    self.buckets_api.update_bucket(bucket)
+
+  def get_retention(self) -> int:
+    bucket = self.buckets_api.find_bucket_by_name(self.bucket)
+    total_seconds = bucket.retention_rules[0].every_seconds
+    return total_seconds // 86400
 
   def _create_point(
       self,
@@ -510,6 +528,16 @@ class InfluxDBStorage:
       self.logger.error(f"Failed to get models: {e}")
       return []
 
+  def delete_bucket(self):
+    status = self.client.delete_api().delete(
+      start = self.TIME_START,
+      stop = self.TIME_END,
+      bucket = self.bucket,
+      org = self.org,
+      predicate=None
+    )
+    return status
+    
   def delete_dataset(
       self,
       dataset_name: str,
@@ -638,7 +666,6 @@ def write_inference(
       features=features,
   )
 
-
 def query_inference(**kwargs) -> List[Dict[str, Any]]:
   """Query inference using singleton instance."""
   storage = get_influx_storage()
@@ -651,16 +678,10 @@ if __name__ == "__main__":
   from zoneinfo import ZoneInfo
 
   dataset_name = "Regression-dd0fbfe4"
-  print(Config.influxdb_token)
+  with InfluxDBStorage() as influx:
+    influx.update_retention(12)
+    print(influx.get_retention())
 
-  # Gunakan context manager untuk auto-close
-    # data = writer.write_inference(dataset_name="Reg-123",
-    #         timestamp = DTEncoder.to_utc(DTEncoder.now()),
-    #         task_type="supervised",
-    #         results={"xgboost": 43.2, "knn": 41.8},
-    #         actual=42.5,
-    #         features={"x1": 1.0, "x2": 2.0})
-    # data = writer.query_inference(dataset_name=dataset_name,task_type="TimeSeries",end="24h")
-    # pprint.pprint(data)
-    # print(len(data))
-    # writer.delete_dataset(dataset_name)
+
+
+

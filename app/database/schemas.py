@@ -205,7 +205,6 @@ class PreprocessingSchema(BaseModel):
   scale: bool = False
   dim_reduce: bool = False
   interval_finetune: int = 5 # days
-  retention: int = 3 # days
 
   def to_args_pycaret(self) -> dict:
     pca_components = 2 if self.dim_reduce else None
