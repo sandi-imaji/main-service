@@ -79,6 +79,7 @@ def mock_dataset(db_session):
       preprocessing=None,
       top_model=None,
       meta={},
+      n_models=2,
   )
 
   db_session.add(dataset)
@@ -113,6 +114,7 @@ def mock_classification_dataset(db_session):
       preprocessing=None,
       top_model=None,
       meta={},
+      n_models=2,
   )
 
   db_session.add(dataset)

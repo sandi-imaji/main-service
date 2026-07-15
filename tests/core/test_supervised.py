@@ -13,7 +13,7 @@ import uuid
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-from app.core.supervised import Supervised, get_model_cache, module
+from app.core.supervised import Supervised, get_model_cache, module, SupervisedResultSchema
 from app.utils.model_cache import ModelCache
 from app.database.orm import Dataset, ModelML
 from app.database.schemas import TaskType, StatusProcess
@@ -75,6 +75,7 @@ def regression_dataset_with_data(db_session, test_storage_dir, monkeypatch):
       preprocessing=None,
       top_model=None,
       meta={"path": str(storage_path / "data.csv")},
+      n_models=2,
   )
 
   db_session.add(dataset)
@@ -151,6 +152,7 @@ def classification_dataset_with_data(db_session, test_storage_dir, monkeypatch):
       preprocessing=None,
       top_model=None,
       meta={"path": str(storage_path / "data.csv")},
+      n_models=2,
   )
 
   db_session.add(dataset)
@@ -475,11 +477,12 @@ class TestInferenceIntegration:
 
     features = {"feature1": [1.0], "feature2": [2.0], "feature3": [3.0]}
 
-    # Should handle gracefully (return error dict, not crash)
+    # Should handle gracefully (return an invalid-result schema, not crash)
     result = Supervised.inference(dataset, features, mock_logger)
 
-    # Should return a dict (either with predictions or error)
-    assert isinstance(result, dict)
+    assert isinstance(result, SupervisedResultSchema)
+    assert result.is_valid is False
+    assert result.features == {"feature1": 1.0, "feature2": 2.0, "feature3": 3.0}
 
   def test_auto_inference_success_integration(
       self, dataset_with_trained_model, mock_logger, monkeypatch
@@ -502,12 +505,11 @@ class TestInferenceIntegration:
     try:
       result = Supervised.auto_inference(dataset, mock_logger)
 
-      # Should return a dict with predictions and actual
+      # Should return a SupervisedResultSchema with predictions and actual
       if result is not None:
-        assert isinstance(result, dict)
-        assert "actual" in result
-        assert result["actual"] == 50.0  # Last value from mock
-        assert "dt" in result
+        assert isinstance(result, SupervisedResultSchema)
+        assert result.actual == 50.0  # Last value from mock
+        assert result.timestamp is not None
     finally:
       Config.debug_mode = original_debug
 
@@ -526,9 +528,9 @@ class TestInferenceIntegration:
 
       # In debug mode, should sample from dataframe
       if result is not None:
-        assert isinstance(result, dict)
-        assert "actual" in result
-        assert "dt" in result
+        assert isinstance(result, SupervisedResultSchema)
+        assert result.actual is not None
+        assert result.timestamp is not None
     finally:
       Config.debug_mode = original_debug
 
@@ -834,6 +836,7 @@ class TestWithTagnameDataIntegration:
         preprocessing=None,
         top_model=None,
         meta={},
+        n_models=2,
     )
 
     db_session.add(dataset)
