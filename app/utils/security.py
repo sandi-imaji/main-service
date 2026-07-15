@@ -9,8 +9,10 @@ from typing import Optional
 from fastapi import HTTPException
 
 
-# Valid pattern for dataset/model names (alphanumeric, hyphen, underscore)
-VALID_NAME_PATTERN = re.compile(r"^[a-zA-Z0-9_-]+$")
+# Valid pattern for dataset/model/file names (alphanumeric, hyphen,
+# underscore, dot - dot is needed for filenames like "data.csv"; ".."
+# traversal is explicitly rejected above before this pattern is checked)
+VALID_NAME_PATTERN = re.compile(r"^[a-zA-Z0-9_.-]+$")
 
 
 def sanitize_path_component(name: str, context: str = "name") -> str:

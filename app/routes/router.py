@@ -1,4 +1,6 @@
 import pprint
+
+from numpy import Inf
 from app.workers.manager import WorkerManager
 from fastapi import Depends, BackgroundTasks, APIRouter, WebSocket, HTTPException, Query, WebSocketDisconnect
 from sqlmodel import Session
@@ -496,12 +498,12 @@ async def clean_model_results(dataset_name: str, db: Session = Depends(get_sessi
 
 @model_router.get("/{dataset_name}/history")
 async def get_historical_predictions(
-  dataset_name: str, n_day: int = 3, db: Session = Depends(get_session)
+  dataset_name: str, db: Session = Depends(get_session)
 ):
   try:
     dataset = get_dataset_or_404(dataset_name, db)
-    interval = dataset.interval
-    n_points = (24 * n_day * 60) // interval
+    # interval = dataset.interval
+    # # n_points = (24 * n_day * 60) // interval
     LOGGER_GLOBAL.info(f"Get Predictions History : {dataset.name} | {dataset.task_type}")
     if dataset.task_type.is_clustering():
       logger = Logger(dataset_name)
@@ -509,8 +511,16 @@ async def get_historical_predictions(
       return data
     else:
       influx = get_influx_storage()
-      data = influx.query_inference(dataset_name=dataset_name,task_type=str(dataset.task_type), start=f"-{24 * n_day}h", end=f"{24 * n_day}h")[:n_points]
+      # No start/end: query_inference defaults to the full range and the
+      # descending sort + limit already caps it to the latest points.
+      data = influx.query_inference(dataset_name=dataset_name, task_type=str(dataset.task_type))
       return data
+  except HTTPException:
+    raise
+  except FileNotFoundError as e:
+    raise HTTPException(status_code=404, detail=str(e))
+  except ValueError as e:
+    raise HTTPException(status_code=400, detail=str(e))
   except Exception as e:
     LOGGER_GLOBAL.error(str(e))
     raise HTTPException(status_code=500, detail=str(e))
@@ -744,9 +754,14 @@ async def get_actual_point(tagname:str):
 
 @utils_router.get("/config")
 async def get_config():
-  return Config.export()
+  data = Config.export()
+  with InfluxDBStorage() as influx:
+    data["retention"] = influx.get_retention()
+    return data
 
 @utils_router.post("/config")
 async def post_config(data:dict):
   Config.import_data(data)
+  retention = data["data"]["retention"]
+  with InfluxDBStorage() as influx: influx.update_retention(int(retention))
   return data

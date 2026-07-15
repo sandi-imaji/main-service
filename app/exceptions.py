@@ -92,6 +92,11 @@ def handle_exception(e: Exception, logger=None) -> AppException:
   if isinstance(e, AppException):
     return e
 
+  if isinstance(e, HTTPException):
+    # Preserve the original status code/detail (e.g. a domain-raised 404)
+    # instead of masking it as a generic 500.
+    return e
+
   if logger:
     logger.error(f"Unexpected error: {str(e)}")
 

@@ -240,6 +240,7 @@ class Supervised(BaseMLCore, InferenceMixin):
         'timestamp': '2026-03-11 02:07:59.636575+07:00',
         'predictions': {'knn': 20.19, 'lr': 20.20}}
     """
+    original_features = features
     try:
       mod = dataset.task_type.module()
       features = pd.DataFrame.from_dict(features)
@@ -265,7 +266,11 @@ class Supervised(BaseMLCore, InferenceMixin):
     except Exception as e:
       logger.error(str(e))
       predictions = {m.name:0.0 for m in dataset.models}
-      return SupervisedResultSchema(features=features,predictions=predictions,timestamp=DTEncoder.now(),dataset_name=dataset.name)
+      flat_features = {
+          k: (v[0] if isinstance(v, (list, tuple)) and v else v)
+          for k, v in original_features.items()
+      }
+      return SupervisedResultSchema(features=flat_features,predictions=predictions,timestamp=DTEncoder.now(),dataset_name=dataset.name)
 
 
   @staticmethod

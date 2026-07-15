@@ -29,7 +29,11 @@ class Dataset(SQLModel, table=True):
   preprocessing: Optional[PreprocessingSchema] = Field(default=None, sa_column=Column(JSON))
   is_valid: bool = Field(sa_column=Column(Boolean), default=False)
   meta: Optional[MetaDataset] = Field(default={}, sa_column=Column(JSON))
-  n_models:int
+  # Defaults to 0 (no top-model search configured yet): DatasetRequestSchema
+  # (plain POST /datasets) has no n_models field, only InitiateRequestSchema
+  # (auto-initiate flow) does - without a default this column being NOT NULL
+  # made every plain dataset-creation request fail with a 500.
+  n_models: int = 0
   # One-to-many ke ModelML
   models: List["ModelML"] = Relationship(back_populates="dataset", sa_relationship_kwargs={
                                          "cascade": "all, delete-orphan"})
