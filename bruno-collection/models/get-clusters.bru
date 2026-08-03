@@ -1,0 +1,19 @@
+meta {
+  name: Get Clusters
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{baseUrl}}/models/:dataset_name/clusters
+  body: none
+  auth: none
+}
+
+params:path {
+  dataset_name: string
+}
+
+docs {
+  Get clustering results for a dataset.
+}

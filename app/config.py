@@ -37,12 +37,36 @@ class Config:
   sl_token: str = os.environ.get("SL_TOKEN","")
   sl_retry:int = int(os.environ.get("SL_RETRY",2))
   sl_timeout: int = int(os.environ.get("SL_TIMEOUT",5))
+  # Timeout untuk panggilan yang memang berat / lambat: query history satu hari
+  # penuh dan lookup row_id. Server SL terukur butuh 5-7 detik, jadi memakai
+  # SL_TIMEOUT (5 detik) di sini membuat sebagian besar request mati sia-sia.
+  sl_timeout_long: int = int(os.environ.get("SL_TIMEOUT_LONG",30))
+  # Server SL memakai sertifikat self-signed, jadi defaultnya tidak diverifikasi.
+  # Set SL_VERIFY=1 kalau sertifikatnya sudah benar.
+  sl_verify: bool = os.environ.get("SL_VERIFY", "0") not in ("0", "", "false", "False")
+  # TTL (detik) cache nilai realtime per-tag yang dilayani proses API (endpoint
+  # /utils/realtime, /utils/actual). Banyak client yang meminta tag yang sama
+  # dalam jendela ini dilayani dari memori -> maksimal 1 hit upstream per TTL.
+  realtime_ttl: float = float(os.environ.get("REALTIME_TTL", 5))
+  # Berapa bagian horizon forecast yang boleh lewat sebelum model di-refit ke
+  # data terbaru. Model meramal `fh` langkah dari UJUNG data latihnya, jadi
+  # makin lama anchor itu dibiarkan makin banyak titik forecast yang jatuh ke
+  # masa lalu. 1.0 = tunggu seluruh horizon lewat (rata-rata separuh grafik
+  # sudah jadi masa lalu); 0.5 = refit di tengah horizon. Makin kecil makin
+  # segar, tapi makin sering finetune (pull + pycaret).
+  forecast_refresh_ratio: float = float(os.environ.get("FORECAST_REFRESH_RATIO", 0.5))
+
+  # Logging: satu akar untuk semua log aplikasi (lihat app/logger.py).
+  # `logs/` sengaja dipilih karena sudah ada di ignore_watch ecosystem dev —
+  # menulis log tidak akan memicu restart-loop pm2.
+  log_dir = dir / "logs"
+  log_retention_days: int = int(os.environ.get("LOG_RETENTION_DAYS", 7))
 
   url: str = "https://10.3.13.1/beta2/application/api"
   key: str = os.environ.get("SL_KEY", "")
-  verbose = Verbose(int(os.environ.get("VERBOSE", 1)))
+  verbose = Verbose(int(os.environ.get("MAIN_VERBOSE", 1)))
   debug_mode = bool(os.environ.get("DEBUGMODE", False))
-  host = os.environ.get("HOST_MAIN", "127.0.0.1")
+  host = os.environ.get("NEXT_PUBLIC_HOST", "127.0.0.1")
   port = int(os.environ.get("PORT_MAIN", 8004))
   utc = timezone(timedelta(hours=7))
   window_size: int = 1_000
@@ -65,6 +89,16 @@ class Config:
   influxdb_bucket: str = os.environ.get("INFLUXDB_BUCKET", "ml-buckets")
   influxdb_retention: int = int(os.environ.get("INFLUXDB_RETENTION", 7))
 
+
+  @classmethod
+  def sl_url(cls, path: str) -> str:
+    """Gabungkan sl_host dengan path endpoint.
+
+    Dipakai supaya tidak ada lagi campuran f"{sl_host}/application/..." dan
+    f"{sl_host}application/..." yang salah satunya selalu keliru tergantung
+    ada tidaknya trailing slash di SL_HOST.
+    """
+    return f"{cls.sl_host.rstrip('/')}/{path.lstrip('/')}"
 
   def connection_str(self) -> str: return f"SL_HOST : {self.sl_host} | HOST : {self.host} | PORT : {self.port}"
   
@@ -110,23 +144,25 @@ class Config:
       if "sl" in key: set_key(dir.parent / ".env",key.upper(),data[key])
 
 COLOR_MAP: dict = {
-    "DEBUG": "\033[36m",  # Cyan
-    "INFO": "\033[32m",  # Green
-    "WARNING": "\033[33m",  # Yellow
-    "ERROR": "\033[31m",  # Red
-    "CRITICAL": "\033[41m",  # Red background
-    "RESET": "\033[0m",
+  "DEBUG": "\033[36m",  # Cyan
+  "INFO": "\033[32m",  # Green
+  "WARNING": "\033[33m",  # Yellow
+  "ERROR": "\033[31m",  # Red
+  "CRITICAL": "\033[41m",  # Red background
+  "RESET": "\033[0m",
 }
 
 if __name__ == "__main__":
-  import pprint
-  pprint.pprint(Config.sl_retry)
-  data = {
-    "data":
-      {
-        "sl_retry": "10"
-      }
-  }
-  Config.update_config(data)
-  pprint.pprint(Config.sl_retry)
+  print(Verbose(0))
+
+  # import pprint
+  # pprint.pprint(Config.sl_retry)
+  # data = {
+  #   "data":
+  #     {
+  #       "sl_retry": "10"
+  #     }
+  # }
+  # Config.update_config(data)
+  # pprint.pprint(Config.sl_retry)
 

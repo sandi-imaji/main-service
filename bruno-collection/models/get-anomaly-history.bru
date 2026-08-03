@@ -1,0 +1,23 @@
+meta {
+  name: Get Anomaly History
+  type: http
+  seq: 17
+}
+
+get {
+  url: {{baseUrl}}/models/:dataset_name/history/anomaly
+  body: none
+  auth: none
+}
+
+params:query {
+  ~n_day: 3
+}
+
+params:path {
+  dataset_name: string
+}
+
+docs {
+  Get a dataset's anomaly prediction history.
+}

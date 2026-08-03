@@ -8,10 +8,14 @@ from datetime import datetime
 from enum import Enum
 from typing import Dict, List, Optional, Any
 import asyncio
-import logging
 
-
-logger = logging.getLogger(__name__)
+# Logger internal, BUKAN `logging` bawaan Python. Versi sebelumnya memakai
+# `logging.getLogger(__name__)`: root logger tidak punya handler dan tidak ada
+# jembatan stdlib→loguru, sehingga `info`/`debug` hilang tanpa jejak dan
+# `warning` bocor ke stderr lewat `logging.lastResort` — tidak pernah sampai ke
+# berkas di `Config.log_dir`. Siklus hidup worker termasuk yang harus tercatat
+# logger global.
+from app.logger import LOGGER_GLOBAL as logger
 
 
 class WorkerStatus(str, Enum):
@@ -93,7 +97,10 @@ class WorkerStateManager:
     def __init__(self):
         self._states: Dict[str, WorkerState] = {}
         self._lock = asyncio.Lock()
-        logger.info("WorkerStateManager initialized (in-memory)")
+        # Sengaja TIDAK mencatat apa pun di sini: instance singleton di bawah
+        # dibuat saat modul diimpor, dan menyentuh logger di titik itu membuat
+        # `Config.log_dir` terbentuk sebagai efek samping impor — termasuk saat
+        # pytest mengumpulkan test, sebelum conftest sempat mengalihkannya.
 
     async def create_worker(
         self,

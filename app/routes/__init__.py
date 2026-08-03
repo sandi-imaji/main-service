@@ -3,7 +3,11 @@ Routes initialization - aggregates all route modules
 """
 
 from fastapi import APIRouter
-from app.routes.router import dataset_router,model_router,stream_router,worker_router,utils_router
+from app.routes.datasets import router as dataset_router
+from app.routes.models import router as model_router
+from app.routes.stream import router as stream_router
+from app.routes.workers import router as worker_router
+from app.routes.utils import router as utils_router
 
 # Main router that combines all sub-routers
 main_router = APIRouter()

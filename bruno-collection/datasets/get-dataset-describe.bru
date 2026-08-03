@@ -1,0 +1,19 @@
+meta {
+  name: Get Dataset Describe
+  type: http
+  seq: 11
+}
+
+get {
+  url: {{baseUrl}}/datasets/:name/describe
+  body: none
+  auth: none
+}
+
+params:path {
+  name: string
+}
+
+docs {
+  Get descriptive statistics for a dataset.
+}

@@ -1,0 +1,19 @@
+meta {
+  name: List Models By Dataset
+  type: http
+  seq: 13
+}
+
+get {
+  url: {{baseUrl}}/models/by-dataset/:dataset_name
+  body: none
+  auth: none
+}
+
+params:path {
+  dataset_name: string
+}
+
+docs {
+  List all models belonging to a dataset.
+}

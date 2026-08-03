@@ -1,0 +1,12 @@
+untuk log nya saya mau begini:
+1. Logger Global Mencatat semua router yang dipermukaan saja, termasuk ketika create worker
+2. kemudian logger untuk dataset itu dipisahkan di 3 folder yaitu Supervised,Unsupervised dan
+TimeSeries, nah didalam folder itu terdapat main_logger dimana isi nya process
+streaming/inference/train/pulling dan logger_worker
+3. saya mau logger nya ada retention , panjang retention nya berapa hari ada di env
+4. tetap pakai Verbose yang udah ada disini. ketika SILENT, itu sama sekali tidak mengeluarkan log
+sama sekali di semua type log, untuk NORMAL itu dia hanya mencatat log di file tapi tidak
+menampilkan di stdout, nah untuk DEBUG itu menulis dan menampilkan nya di stdout , saya ingin ini
+agar logger_worker nya di pm2 nya lebih ke manage.
+
+Apakah kamu paham ? atau ada saran lain agar log nya bisa informatif tapi juga mudah di maintain? 

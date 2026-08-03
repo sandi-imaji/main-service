@@ -24,8 +24,7 @@ def get_db_session() -> Generator[Session, None, None]:
 
 def get_db() -> Generator[Session, None, None]:
   """FastAPI dependency for database sessions"""
-  with get_db_session() as session:
-    yield session
+  with get_db_session() as session: yield session
 
 
 class DatabaseMixin:

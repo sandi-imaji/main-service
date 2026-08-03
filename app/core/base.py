@@ -1,47 +1,33 @@
 """
-Base Core Module for ML Operations
-Provides common functionality for all ML task types (Supervised, Unsupervised, TimeSeries, Anomaly)
+Base for the pure ML core.
+
+Shared, task-agnostic helpers only: the per-task model cache (LRU) and the
+`ALGO_LIST` loaded from `algorithm_list.json`. Deliberately free of any
+Dataset / DB / HTTP knowledge — the core talks to the service layer solely
+through `app.core.contracts`.
 """
 
-import os
-import asyncio
-from typing import Any, Dict, Optional, TypeVar, Callable
+import json
+from typing import Any, Dict, Optional
 from abc import ABC, abstractmethod
-from functools import wraps
 
 from app.config import Config
-from app.helpers import DTEncoder
-from app.database.schemas import MetaModel, StatusProcess
-from app.database.orm import ModelML
 from app.utils.model_cache import ModelCache
 
-T = TypeVar("T")
 
-class ResultSchema():
-  def model_dump(self): raise NotImplementedError()
-
-def async_wrap(func: Callable[..., T]) -> Callable[..., asyncio.Future[T]]:
-  """
-  Decorator to create async version of a sync function.
-  Wraps the sync function in run_in_executor for non-blocking execution.
-  """
-
-  @wraps(func)
-  async def async_wrapper(*args, **kwargs):
-    loop = asyncio.get_event_loop()
-    return await loop.run_in_executor(None, lambda: func(*args, **kwargs))
-  return async_wrapper
+# Algorithm catalogue ({task_type: {algorithm: description}}), read once at import.
+_ALGO_PATH = Config.dir / "algorithm_list.json"
+if not _ALGO_PATH.exists(): raise ValueError(f"algorithm list : [{_ALGO_PATH}] is not found!")
+with open(_ALGO_PATH, "r") as f: ALGO_LIST = json.load(f)
 
 
 class BaseMLCore(ABC):
   """
-  Abstract base class for all ML core modules.
+  Abstract base for every ML core module.
 
-  Provides common functionality:
-  - Model caching with LRU
-  - Cache statistics
-  - Async wrapper for sync methods
-  - Common training patterns
+  Provides the shared model-cache plumbing; each subclass only has to say which
+  cache it uses via `get_cache()`. All actual compute (predict / forecast /
+  compare_models / …) lives on the task-specific subclasses.
   """
 
   # To be overridden by subclasses
@@ -56,14 +42,8 @@ class BaseMLCore(ABC):
 
   @classmethod
   def get_cache_stats(cls) -> Dict[str, Any]:
-    """
-    Get model cache statistics.
-
-    Returns:
-        Dictionary with cache statistics (hits, misses, size, hit_rate, etc.)
-    """
-    cache = cls.get_cache()
-    stats = cache.get_stats()
+    """Cache statistics (hits, misses, size, hit_rate, …)."""
+    stats = cls.get_cache().get_stats()
     return {
         "hits": stats.hits,
         "misses": stats.misses,
@@ -75,22 +55,11 @@ class BaseMLCore(ABC):
   @classmethod
   def clear_cache(cls) -> None:
     """Clear the model cache."""
-    cache = cls.get_cache()
-    cache.clear()
+    cls.get_cache().clear()
 
   @classmethod
   def _load_model_cached(cls, mod: Any, model_path: str, logger: Any) -> Any:
-    """
-    Load model with caching support.
-
-    Args:
-        mod: PyCaret module (e.g., classification, clustering)
-        model_path: Path to the model file
-        logger: Logger instance
-
-    Returns:
-        Loaded model (cached if available)
-    """
+    """Load a pycaret model, serving from (and populating) the shared cache."""
     cache = cls.get_cache()
     cached_model = cache.get(model_path)
 
@@ -103,128 +72,3 @@ class BaseMLCore(ABC):
     cache.put(model_path, model)
 
     return model
-
-  @classmethod
-  def _create_model_metadata(
-      cls,
-      algorithm: str,
-      path_model: str,
-      metric: Dict[str, Any],
-      train_time: float = 0.0,
-  ) -> tuple[str, MetaModel]:
-    """
-    Create model name and metadata for a trained model.
-
-    Args:
-        algorithm: Algorithm name
-        path_model: Path to saved model
-        metric: Evaluation metrics dictionary
-        train_time: Training time in seconds
-
-    Returns:
-        Tuple of (model_name, metadata)
-    """
-    import uuid
-
-    model_name = f"{algorithm}-{str(uuid.uuid4())[:8]}"
-
-    meta = MetaModel(
-        created_by="Anonymous",
-        created_at=DTEncoder.now(),
-        train_time=train_time,
-        size_of=os.path.getsize(f"{Config.dir}/{path_model}.pkl"),
-        notes="",
-    )
-
-    return model_name, meta
-
-  @classmethod
-  def _save_model_to_db(
-      cls,
-      dataset: Any,
-      model_name: str,
-      algorithm: str,
-      path_model: str,
-      metric: Dict[str, Any],
-      meta: MetaModel,
-      logger: Any,
-  ) -> ModelML:
-    """
-    Create and save ModelML object to dataset.
-
-    Args:
-        dataset: Dataset object
-        model_name: Model name
-        algorithm: Algorithm name
-        path_model: Path to model
-        metric: Evaluation metrics
-        meta: Model metadata
-        logger: Logger instance
-
-    Returns:
-        Created ModelML object
-    """
-    q_model = ModelML(
-        name=model_name,
-        algorithm=algorithm,
-        is_active=True,
-        evaluation=metric,
-        meta=meta.model_dump(),
-        status=StatusProcess.SUCCESS_TRAIN,
-        path=path_model,
-    )
-
-    dataset.models.append(q_model)
-    logger.info(f"Model {model_name} ({algorithm}) saved to dataset")
-
-    return q_model
-
-  @classmethod
-  def train(cls, dataset_name: str, **kwargs) -> Dict[str, Any]:
-    """Train models - should be implemented by subclasses."""
-    raise NotImplementedError("Subclasses must implement train() method")
-
-  @classmethod
-  def inference(cls, dataset: Any, **kwargs) -> ResultSchema:
-    """Run inference - should be implemented by subclasses."""
-    raise NotImplementedError("Subclasses must implement inference() method")
-
-  @classmethod
-  def auto_inference(cls, dataset: Any, **kwargs) -> ResultSchema:
-    """Auto inference - should be implemented by subclasses."""
-    raise NotImplementedError(
-        "Subclasses must implement auto_inference() method")
-
-
-class InferenceMixin:
-  """
-  Mixin class providing common inference functionality.
-  Can be used by core modules that need async inference support.
-  """
-
-  @staticmethod
-  def inference_async(dataset: Any, **kwargs):
-    """
-    Async wrapper for inference method.
-    Note: This should be overridden by subclasses or used as a template.
-
-    Usage:
-        result = await Supervised.inference_async(dataset, features=features)
-    """
-    raise NotImplementedError("Subclasses should implement inference_async")
-
-  @staticmethod
-  def auto_inference_async(dataset: Any, **kwargs):
-    """
-    Async wrapper for auto_inference method.
-    Note: This should be overridden by subclasses or used as a template.
-
-    Usage:
-        result = await Supervised.auto_inference_async(dataset)
-    """
-    raise NotImplementedError(
-        "Subclasses should implement auto_inference_async")
-
-
-
-

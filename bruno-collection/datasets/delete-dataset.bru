@@ -1,0 +1,19 @@
+meta {
+  name: Delete Dataset
+  type: http
+  seq: 8
+}
+
+delete {
+  url: {{baseUrl}}/datasets/:name
+  body: none
+  auth: none
+}
+
+params:path {
+  name: string
+}
+
+docs {
+  Delete a dataset by name (use 'ALL-' to delete every dataset).
+}

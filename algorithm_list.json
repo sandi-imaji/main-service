@@ -48,8 +48,7 @@
   "Clustering" : {
     "kmeans":"K-Means Clustering",
     "kmodes":"K-Modes Clustering",
-    "sc":"Spectral Clustering",
-    "birch":"Birch Clustering"
+    "sc":"Spectral Clustering"
   },
   "TimeSeries" : {
     "arima":"Arima",

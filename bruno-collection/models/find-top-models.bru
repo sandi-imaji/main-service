@@ -1,0 +1,19 @@
+meta {
+  name: Find Top Models
+  type: http
+  seq: 8
+}
+
+post {
+  url: {{baseUrl}}/models/find-top
+  body: none
+  auth: none
+}
+
+params:query {
+  dataset_name: string
+}
+
+docs {
+  Search for the best-performing models in the background.
+}

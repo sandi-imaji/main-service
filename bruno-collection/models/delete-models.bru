@@ -1,0 +1,19 @@
+meta {
+  name: Delete Models
+  type: http
+  seq: 14
+}
+
+delete {
+  url: {{baseUrl}}/models/by-dataset/:dataset_name
+  body: none
+  auth: none
+}
+
+params:path {
+  dataset_name: string
+}
+
+docs {
+  Delete all models belonging to a dataset.
+}

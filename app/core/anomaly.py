@@ -1,83 +1,24 @@
 """
-Anomaly Detection Module
-Optimized for performance with lazy loading and model caching.
-Phase 3: Async support dengan unified cache
+Anomaly Detection Module (pure ML core).
+
+Compute only — no Dataset / DB / Influx. Training pulls its inputs from an
+AnomalyTrainRequest; inference from a PredictRequest. The service layer
+(app.services) owns pulling live data, persistence, and the InfluxDB write side.
 """
+import pandas as pd
 
-from dataclasses import is_dataclass
-import pandas as pd,datetime,time,traceback,sys,json
-from pathlib import Path
-from typing import Dict
-from pydantic import BaseModel
-
-if __name__ == "__main__":
-  # Get the directory containing this file: app/core/
-  current_dir = Path(__file__).parent
-  # Go up to parent: app/
-  app_dir = current_dir.parent
-  # Go up again to root project
-  root_dir = app_dir.parent
-  # Add root to sys.path if not already there
-  if str(root_dir) not in sys.path:
-    sys.path.insert(0, str(root_dir))
-
-
-from pycaret import anomaly as mod
-from app.database.db import get_session
-from app.database.orm import Dataset
-from app.database.schemas import PreprocessingSchema, TaskType
-from app.database.influx import InfluxDBStorage, get_influx_storage
-from app.pull import pull_realtime
 from app.utils.model_cache import get_anomaly_cache
-from app.logger import Logger, LoggerNone
 from app.config import Config
-from app.helpers import DTEncoder
-from app.core.base import BaseMLCore, InferenceMixin,ResultSchema
-# from app.core.unsupervised import Unsupervised
+from app.core.base import BaseMLCore
+from app.core.contracts import AnomalyTrainRequest, PredictRequest, TrainedModel, AnomalyResult
+from pycaret import anomaly as mod
 
 
-# =============================================================================
-# Anomaly Detection Class
-# =============================================================================
-
-class AnomalyResultSchema(BaseModel,ResultSchema):
-  timestamp:datetime.datetime
-  features:Dict[str,int|float]
-  is_anomaly:bool
-  anomaly_score:int|float
-  dataset_name:str
-  is_valid:bool = False
-
-  def write_to_influx(self,influx:InfluxDBStorage,logger) -> None:
-    logger.info(f"[Efficient] Got InfluxDB storage: {influx.bucket}")
-    timestamp = DTEncoder.to_utc(self.timestamp)
-    dataset_name = f"{self.dataset_name}"
-    write_result = influx.write_inference(
-      dataset_name= dataset_name,
-      task_type=self.task_type,
-      timestamp=timestamp,
-      results={"is_anomaly":self.is_anomaly,"anomaly_score":self.anomaly_score},
-      features=self.features
-    )
-    logger.info(f"[Efficient] Write result: {write_result}")
-
-  @property
-  def task_type(self): return "Anomaly"
-  
-  @staticmethod
-  def invalid(dataset_name:str):
-    features = {"":0.0}
-    return AnomalyResultSchema(timestamp=DTEncoder.now(),
-                               features=features,dataset_name=dataset_name,
-                               is_anomaly=False,anomaly_score=0.0,is_valid=False)
-
-
-class Anomaly(BaseMLCore, InferenceMixin):
+class Anomaly(BaseMLCore):
   """
   Anomaly detection operations with optimizations:
   - Lazy model loading (only when needed)
   - Model caching for faster repeated inference
-  - Thread-safe operations
   """
 
   ALGORITHM = "iforest"  # Default algorithm: Isolation Forest
@@ -89,142 +30,89 @@ class Anomaly(BaseMLCore, InferenceMixin):
     return get_anomaly_cache()
 
   @staticmethod
-  def auto_inference(dataset:Dataset,logger):
-    logger.info("Auto Inference Start ...")
-    columns = dataset.meta.get("columns","")
-    if not columns: columns = dataset.open_dataframe().drop(columns='dt').columns
-    if "dt" in columns: columns.remove("dt")
-    pulled = pull_realtime(columns)
-    if not pulled: pulled = [0.0 for _ in columns]
-    features = {val:[pulled[idx]] for idx,val in enumerate(columns)}
-    result = Anomaly.inference(dataset,features,logger)
-    return result
+  def predict(req: PredictRequest, logger) -> AnomalyResult:
+    """
+    Run anomaly inference. Pure compute: loads the (single) saved model via the
+    shared cache and returns is_anomaly + score. Raises on failure; the caller
+    decides how to handle it.
+    """
+    features_df = pd.DataFrame.from_dict(req.features)
+    _, path = req.models[0]                     # anomaly keeps a single model
+
+    logger.info(f"Inference Anomaly with {Anomaly.ALGORITHM}")
+    model = Anomaly._load_model_cached(mod, path, logger)
+    res = mod.predict_model(model, features_df)[["Anomaly", "Anomaly_Score"]].iloc[0].to_dict()
+    logger.info("Inference finished!")
+
+    return AnomalyResult(features=features_df.iloc[0].to_dict(),is_anomaly=bool(res["Anomaly"]), anomaly_score=res["Anomaly_Score"])
 
   @staticmethod
-  def auto_inference_write_loop(dataset:Dataset,logger):
-    logger.info("start auto inference write loop ...")
-    idx = 1
-    try:
-      while True:
-        logger.info(f"auto inference - {idx}")
-        results = Anomaly.anomaly(dataset=dataset,logger=logger)
-        if results.is_valid:
-          logger.info(f" Writing to InfluxDB...")
-          try:
-            influx = get_influx_storage()
-            results.write_to_influx(influx,logger)
-          except Exception as e:
-            logger.error(f"[Efficient] Failed to write to InfluxDB: {e}")
-            logger.error(traceback.format_exc())
-            # Don't raise - continue even if InfluxDB fails
-        time.sleep(dataset.interval * 60)
-        idx += 1
-    except Exception as e:
-      logger.error(str(e))
-      return None
-    except KeyboardInterrupt: return None
-
-  @staticmethod
-  def inference(dataset:Dataset,features:Dict,logger) -> AnomalyResultSchema:
+  def train_one(req: AnomalyTrainRequest, logger) -> TrainedModel:
     """
-    """
-    try:
-      mod = TaskType.Anomaly.module()
-      features = pd.DataFrame.from_dict(features)
+    Train an anomaly-detection model. Pure compute (no Dataset/DB): saves the
+    model and the labelled CSV under the dataset storage root, and returns its
+    descriptor.
 
-      logger.info(f"Inference Anomaly with {Anomaly.ALGORITHM}")
-      modelpath = Config.dir / "storages"/dataset.name/"anomaly"
-      # Use cached model loading
-      model = Anomaly._load_model_cached(mod, str(modelpath), logger)
-      # Run prediction
-      res = mod.predict_model(model, features)[["Anomaly","Anomaly_Score"]].iloc[0].to_dict()
-
-      logger.info("Inference finished!")
-      features = features.iloc[0].to_dict()
-      return AnomalyResultSchema(features=features,is_anomaly=bool(res['Anomaly']),anomaly_score=res["Anomaly_Score"],
-                                 timestamp=DTEncoder.now(),dataset_name=dataset.name,is_valid=True)
-    except Exception as e:
-      logger.warning(str(e))
-      return AnomalyResultSchema(features={},is_anomaly=False,
-                                 anomaly_score=0.0,timestamp=DTEncoder.now(),dataset_name="",is_valid=False)
-
-  @staticmethod
-  def train(dataset: Dataset,algorithm:str,fraction:float, logger):
-    """
-    Train anomaly detection model using Isolation Forest.
-
-    Args:
-        dataset: Dataset object
-        logger: Logger instance
+    Anomaly keeps a single model at `<storage>/anomaly` (not per-algorithm in
+    top_model/), so the paths are derived from `req.out_dir.parent`.
     """
     logger.info("Training Dataset Anomaly ...")
-    df = dataset.open_dataframe()
-
+    df = req.df
+    algorithm = req.algorithm
     if "dt" in df.columns.tolist(): df = df.drop(columns="dt")
+    storage_root = req.out_dir.parent          # out_dir == <storage>/top_model
 
-    fpath = Config.dir / "storages" / dataset.name
+    mod.setup(df, verbose=Config.verbose.pycaret, **req.preprocessing)
+    model = mod.create_model(algorithm, fraction=req.fraction)
 
-    # Setup and train
-    if dataset.preprocessing:
-      args = PreprocessingSchema(**dataset.preprocessing).to_args_pycaret()
-      mod.setup(df, verbose=Config.verbose.pycaret,**args)
-    else: mod.setup(df, verbose=Config.verbose.pycaret)
-    model = mod.create_model(algorithm,fraction=fraction)
+    # Assign labels and save results for later review.
+    labelled = mod.assign_model(model)
+    labelled.to_csv(storage_root / "anomaly.csv", index=False)
 
-    # Assign labels and save results
-    df_with_labels = mod.assign_model(model)
-    df_with_labels.to_csv(f"{fpath}/anomaly.csv", index=False)
+    path = storage_root / "anomaly"
+    mod.save_model(model, str(path))
+    get_anomaly_cache().invalidate(str(path))
 
-    # Save model
-    mod.save_model(model, f"{fpath}/anomaly")
+    evaluation = Anomaly._summarise(labelled, req.fraction)
+    logger.info(f"Successfully Trained Anomaly Model | {evaluation}")
+    return TrainedModel.from_saved(algorithm, path, evaluation)
 
-    # Invalidate cache for this model
-    get_anomaly_cache().invalidate(f"{fpath}/anomaly")
-
-    logger.info("Successfully Trained Anomaly Model")
-    return df_with_labels
-  
   @staticmethod
-  def anomaly(dataset:Dataset,logger):
-    result = Anomaly.auto_inference(dataset,logger)
-    logger.info(f"is_anomaly : {result.is_anomaly} | anomaly_score : {result.anomaly_score}")
-    core = dataset.task_type.core()
-    features = {key:[result.features[key]] for key in result.features}
-    # fpath = Config.dir/"storages"/dataset.name/'cluster_anomaly.json'
-    if dataset.task_type.is_clustering():
-      clusters = core.inference(dataset,features,logger=logger)
-      logger.info(f"Clusters : {clusters.clusters}")
-      logger.info("Verify anomaly with cluster ...")
-      if result.is_anomaly:
-        is_same_clusters = core.is_same_cluster(clusters.clusters,"anomaly")
-        if is_same_clusters: logger.info("Cluster is anomaly")
-        result.is_anomaly = is_same_clusters
-    return result
+  def _summarise(labelled: pd.DataFrame, fraction: float) -> dict:
+    """Summarise the detection result into numbers a user can judge.
 
-def main():
-  if len(sys.argv) > 1:
-    dataset_name = sys.argv[1]
-    db = next(get_session())
-    dataset = Dataset.get_by_name(dataset_name,db)
-    if not dataset: raise ValueError("Dataset is not found!")
-    logger = LoggerNone(dataset_name)
-    Anomaly.auto_inference_write_loop(dataset,logger=logger)
-  else:
-    print(sys.argv)
-    print("Dataset name is None")
+    Anomaly has no comparison metric like the other tasks — there are no ground
+    truth labels to score against, so no MAE or Silhouette can be computed. The
+    consequence used to be an empty `{}` evaluation: no way to compare `iforest`
+    against `knn`, no way to tell whether the chosen `fraction` was sensible, and
+    the dashboard had to skip it entirely.
 
+    What is offered here is purely descriptive, taken from columns
+    `assign_model()` already produces:
 
-if __name__ == "__main__":
-  # from app.logger import Logger
-  # import pprint,time
-  # dataset_name = "Clustering-1b4f986c"
-  # db = next(get_session())
-  # logger = Logger("test")
-  # dataset = Dataset.get_by_name(dataset_name,db)
-  # if not dataset: raise ValueError("Dataset is not found!")
-  # # data = Anomaly.train(dataset,algorithm="iforest",fraction=0.4,logger=logger)
-  # result = Anomaly.anomaly(dataset,logger)
-  # print(result)
-  # Anomaly.clear_cache()
-  main()
-  
+    - `AnomalyRate` / `AnomalyCount` — how many were flagged. Compared against
+      `FractionRequested`, this is how you see whether the model actually
+      honoured what was asked of it.
+    - `ScoreMean` / `ScoreP95` / `ScoreMax` — the score spread. The gap between
+      P95 and Max shows whether anomalies stand out sharply or tail off; if they
+      tail off, the threshold is essentially arbitrary.
+    - `Threshold` — the lowest score still counted as an anomaly, i.e. the
+      dividing line the model settled on.
+    """
+    anomaly = labelled["Anomaly"].astype(bool)
+    score = labelled["Anomaly_Score"].astype(float)
+    total = int(len(labelled))
+    count = int(anomaly.sum())
+
+    summary = {
+        "AnomalyCount": count,
+        "AnomalyRate": count / total if total else None,
+        "FractionRequested": float(fraction),
+        "TotalRows": total,
+        "ScoreMean": float(score.mean()) if total else None,
+        "ScoreP95": float(score.quantile(0.95)) if total else None,
+        "ScoreMax": float(score.max()) if total else None,
+    }
+    # A threshold only means anything when something was actually flagged.
+    summary["Threshold"] = float(score[anomaly].min()) if count else None
+    return summary

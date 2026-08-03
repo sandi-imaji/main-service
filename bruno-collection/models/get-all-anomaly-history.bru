@@ -1,0 +1,19 @@
+meta {
+  name: Get All Anomaly History
+  type: http
+  seq: 15
+}
+
+get {
+  url: {{baseUrl}}/models/history/anomaly
+  body: none
+  auth: none
+}
+
+params:query {
+  ~n_day: 3
+}
+
+docs {
+  Get anomaly prediction history across all datasets.
+}

@@ -1,0 +1,19 @@
+meta {
+  name: Get Cluster Names
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/utils/clusters/unique
+  body: none
+  auth: none
+}
+
+params:query {
+  dataset_name: string
+}
+
+docs {
+  Get cluster names for a dataset, falling back to the raw unique clusters.
+}

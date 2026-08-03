@@ -1,0 +1,19 @@
+meta {
+  name: Get Dataset Pca
+  type: http
+  seq: 12
+}
+
+get {
+  url: {{baseUrl}}/datasets/:name/pca
+  body: none
+  auth: none
+}
+
+params:path {
+  name: string
+}
+
+docs {
+  Get a PCA projection of a dataset.
+}

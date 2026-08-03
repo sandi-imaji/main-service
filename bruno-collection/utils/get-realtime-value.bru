@@ -1,0 +1,19 @@
+meta {
+  name: Get Realtime Value
+  type: http
+  seq: 7
+}
+
+get {
+  url: {{baseUrl}}/utils/actual?tagname=CRAH-2DH2.1-RETURN_AIR_HUMIDITY
+  body: none
+  auth: none
+}
+
+params:query {
+  tagname: CRAH-2DH2.1-RETURN_AIR_HUMIDITY
+}
+
+docs {
+  Get the latest realtime value for a tag.
+}

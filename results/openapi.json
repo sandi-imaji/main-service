@@ -1,0 +1,2165 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Smart AI",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/datasets": {
+      "get": {
+        "tags": [
+          "datasets"
+        ],
+        "summary": "List Datasets",
+        "description": "List all datasets with pagination info.",
+        "operationId": "list_datasets_datasets_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response List Datasets Datasets Get"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "datasets"
+        ],
+        "summary": "Create Dataset",
+        "description": "Create a new dataset and start pulling its data in the background.",
+        "operationId": "create_dataset_datasets_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateDatasetSchema"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Create Dataset Datasets Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/datasets/names": {
+      "get": {
+        "tags": [
+          "datasets"
+        ],
+        "summary": "List Dataset Names",
+        "description": "List all dataset names.",
+        "operationId": "list_dataset_names_datasets_names_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array",
+                  "title": "Response List Dataset Names Datasets Names Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/datasets/active": {
+      "get": {
+        "tags": [
+          "datasets"
+        ],
+        "summary": "List Active Datasets",
+        "description": "List datasets with their task type (and cluster names for clustering).",
+        "operationId": "list_active_datasets_datasets_active_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "type": "array",
+                  "title": "Response List Active Datasets Datasets Active Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/datasets/filter/{task_type}": {
+      "get": {
+        "tags": [
+          "datasets"
+        ],
+        "summary": "Filter Datasets By Task Type",
+        "description": "Filter datasets by task type.",
+        "operationId": "filter_datasets_by_task_type_datasets_filter__task_type__get",
+        "parameters": [
+          {
+            "name": "task_type",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Task Type"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Filter Datasets By Task Type Datasets Filter  Task Type  Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "datasets"
+        ],
+        "summary": "Delete Datasets By Task Type",
+        "description": "Delete all datasets of a given task type.",
+        "operationId": "delete_datasets_by_task_type_datasets_filter__task_type__delete",
+        "parameters": [
+          {
+            "name": "task_type",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Task Type"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/datasets/{name}": {
+      "get": {
+        "tags": [
+          "datasets"
+        ],
+        "summary": "Get Dataset",
+        "description": "Get a dataset by name, including its worker status.",
+        "operationId": "get_dataset_datasets__name__get",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Get Dataset Datasets  Name  Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "datasets"
+        ],
+        "summary": "Delete Dataset",
+        "description": "Delete a dataset by name (use 'ALL-' to delete every dataset).",
+        "operationId": "delete_dataset_datasets__name__delete",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Delete Dataset Datasets  Name  Delete"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/datasets/{name}/status": {
+      "get": {
+        "tags": [
+          "datasets"
+        ],
+        "summary": "Get Dataset Status",
+        "description": "Get a dataset's processing status.",
+        "operationId": "get_dataset_status_datasets__name__status_get",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Get Dataset Status Datasets  Name  Status Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/datasets/{name}/sample": {
+      "get": {
+        "tags": [
+          "datasets"
+        ],
+        "summary": "Get Dataset Sample",
+        "description": "Get a random sample of rows from a dataset.",
+        "operationId": "get_dataset_sample_datasets__name__sample_get",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/datasets/{name}/describe": {
+      "get": {
+        "tags": [
+          "datasets"
+        ],
+        "summary": "Get Dataset Describe",
+        "description": "Get descriptive statistics for a dataset.",
+        "operationId": "get_dataset_describe_datasets__name__describe_get",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/datasets/{name}/pca": {
+      "get": {
+        "tags": [
+          "datasets"
+        ],
+        "summary": "Get Dataset Pca",
+        "description": "Get a PCA projection of a dataset.",
+        "operationId": "get_dataset_pca_datasets__name__pca_get",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/datasets/{name}/logs": {
+      "get": {
+        "tags": [
+          "datasets"
+        ],
+        "summary": "Get Dataset Logs",
+        "description": "Get a dataset's logs.",
+        "operationId": "get_dataset_logs_datasets__name__logs_get",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/models/auto-initiate": {
+      "post": {
+        "tags": [
+          "models"
+        ],
+        "summary": "Auto Initiate",
+        "description": "Create a dataset and train its top models in the background.",
+        "operationId": "auto_initiate_models_auto_initiate_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateDatasetSchema"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/models/auto-inference": {
+      "post": {
+        "tags": [
+          "models"
+        ],
+        "summary": "Run Auto Inference",
+        "description": "Run inference using a dataset's top model.",
+        "operationId": "run_auto_inference_models_auto_inference_post",
+        "parameters": [
+          {
+            "name": "dataset_name",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Dataset Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/models/inference": {
+      "post": {
+        "tags": [
+          "models"
+        ],
+        "summary": "Run Inference",
+        "description": "Run inference on a dataset with an explicit input payload.",
+        "operationId": "run_inference_models_inference_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InferenceRequestSchema"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/models/anomaly/auto": {
+      "post": {
+        "tags": [
+          "models"
+        ],
+        "summary": "Run Auto Anomaly",
+        "description": "Train an anomaly model and start its worker in the background.",
+        "operationId": "run_auto_anomaly_models_anomaly_auto_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnomalyRequestSchema"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/models/{dataset_name}/clusters": {
+      "get": {
+        "tags": [
+          "models"
+        ],
+        "summary": "Get Clusters",
+        "description": "Get clustering results for a dataset.",
+        "operationId": "get_clusters_models__dataset_name__clusters_get",
+        "parameters": [
+          {
+            "name": "dataset_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Dataset Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/models/{dataset_name}/forecast": {
+      "get": {
+        "tags": [
+          "models"
+        ],
+        "summary": "Get Forecast",
+        "description": "Get a time-series forecast, refreshing the model if it is expired.",
+        "operationId": "get_forecast_models__dataset_name__forecast_get",
+        "parameters": [
+          {
+            "name": "dataset_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Dataset Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/models/{dataset_name}/forecast/get_actual": {
+      "get": {
+        "tags": [
+          "models"
+        ],
+        "summary": "Refresh Forecast Actuals",
+        "description": "Refresh a time-series dataset's actual values from InfluxDB.",
+        "operationId": "refresh_forecast_actuals_models__dataset_name__forecast_get_actual_get",
+        "parameters": [
+          {
+            "name": "dataset_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Dataset Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/models/find-top": {
+      "post": {
+        "tags": [
+          "models"
+        ],
+        "summary": "Find Top Models",
+        "description": "Search for the best-performing models in the background.",
+        "operationId": "find_top_models_models_find_top_post",
+        "parameters": [
+          {
+            "name": "dataset_name",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Dataset Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/models/train": {
+      "post": {
+        "tags": [
+          "models"
+        ],
+        "summary": "Train Model",
+        "description": "Train a single model in the background.",
+        "operationId": "train_model_models_train_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ModelTrainSchema"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/models/{dataset_name}/change-top/{algorithm}": {
+      "post": {
+        "tags": [
+          "models"
+        ],
+        "summary": "Change Top Model",
+        "description": "Set a dataset's top model to the given algorithm.",
+        "operationId": "change_top_model_models__dataset_name__change_top__algorithm__post",
+        "parameters": [
+          {
+            "name": "dataset_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Dataset Name"
+            }
+          },
+          {
+            "name": "algorithm",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Algorithm"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/models": {
+      "get": {
+        "tags": [
+          "models"
+        ],
+        "summary": "List Models",
+        "description": "List all trained models.",
+        "operationId": "list_models_models_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "type": "array",
+                  "title": "Response List Models Models Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/models/algorithms/{task_type}": {
+      "get": {
+        "tags": [
+          "models"
+        ],
+        "summary": "List Algorithms",
+        "description": "List available algorithms for a task type.",
+        "operationId": "list_algorithms_models_algorithms__task_type__get",
+        "parameters": [
+          {
+            "name": "task_type",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Task Type"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/models/by-dataset/{dataset_name}": {
+      "get": {
+        "tags": [
+          "models"
+        ],
+        "summary": "List Models By Dataset",
+        "description": "List all models belonging to a dataset.",
+        "operationId": "list_models_by_dataset_models_by_dataset__dataset_name__get",
+        "parameters": [
+          {
+            "name": "dataset_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Dataset Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "models"
+        ],
+        "summary": "Delete Models",
+        "description": "Delete all models belonging to a dataset.",
+        "operationId": "delete_models_models_by_dataset__dataset_name__delete",
+        "parameters": [
+          {
+            "name": "dataset_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Dataset Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/models/history/anomaly": {
+      "get": {
+        "tags": [
+          "models"
+        ],
+        "summary": "Get All Anomaly History",
+        "description": "Get anomaly prediction history across all datasets.",
+        "operationId": "get_all_anomaly_history_models_history_anomaly_get",
+        "parameters": [
+          {
+            "name": "n_day",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 3,
+              "title": "N Day"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/models/{dataset_name}/history": {
+      "get": {
+        "tags": [
+          "models"
+        ],
+        "summary": "Get Prediction History",
+        "description": "Get a dataset's prediction history (from InfluxDB, or clusters for clustering).",
+        "operationId": "get_prediction_history_models__dataset_name__history_get",
+        "parameters": [
+          {
+            "name": "dataset_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Dataset Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/models/{dataset_name}/history/anomaly": {
+      "get": {
+        "tags": [
+          "models"
+        ],
+        "summary": "Get Anomaly History",
+        "description": "Get a dataset's anomaly prediction history.",
+        "operationId": "get_anomaly_history_models__dataset_name__history_anomaly_get",
+        "parameters": [
+          {
+            "name": "dataset_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Dataset Name"
+            }
+          },
+          {
+            "name": "n_day",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 3,
+              "title": "N Day"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/models/{model_name}": {
+      "get": {
+        "tags": [
+          "models"
+        ],
+        "summary": "Get Model",
+        "description": "Get a model by name.",
+        "operationId": "get_model_models__model_name__get",
+        "parameters": [
+          {
+            "name": "model_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Model Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/models/{dataset_name}/results": {
+      "delete": {
+        "tags": [
+          "models"
+        ],
+        "summary": "Clean Model Results",
+        "description": "Clean a dataset's inference results.",
+        "operationId": "clean_model_results_models__dataset_name__results_delete",
+        "parameters": [
+          {
+            "name": "dataset_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Dataset Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/workers/tasks": {
+      "get": {
+        "tags": [
+          "workers"
+        ],
+        "summary": "List Tasks",
+        "description": "List all worker tasks.",
+        "operationId": "list_tasks_workers_tasks_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/workers/task": {
+      "get": {
+        "tags": [
+          "workers"
+        ],
+        "summary": "Get Task",
+        "description": "List worker tasks for a dataset.",
+        "operationId": "get_task_workers_task_get",
+        "parameters": [
+          {
+            "name": "dataset_name",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Dataset Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/workers/start": {
+      "post": {
+        "tags": [
+          "workers"
+        ],
+        "summary": "Start Task",
+        "description": "Start a worker task.",
+        "operationId": "start_task_workers_start_post",
+        "parameters": [
+          {
+            "name": "task_name",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Task Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/workers/create": {
+      "post": {
+        "tags": [
+          "workers"
+        ],
+        "summary": "Create Task",
+        "description": "Create a worker task for a dataset.",
+        "operationId": "create_task_workers_create_post",
+        "parameters": [
+          {
+            "name": "dataset_name",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Dataset Name"
+            }
+          },
+          {
+            "name": "is_anomaly",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Is Anomaly"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/workers/stop": {
+      "post": {
+        "tags": [
+          "workers"
+        ],
+        "summary": "Stop Task",
+        "description": "Stop a worker task.",
+        "operationId": "stop_task_workers_stop_post",
+        "parameters": [
+          {
+            "name": "task_name",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Task Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/workers/stop-by-dataset": {
+      "post": {
+        "tags": [
+          "workers"
+        ],
+        "summary": "Stop Task By Dataset",
+        "description": "Stop a worker task identified by dataset name and task type.",
+        "operationId": "stop_task_by_dataset_workers_stop_by_dataset_post",
+        "parameters": [
+          {
+            "name": "dataset_name",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Dataset Name"
+            }
+          },
+          {
+            "name": "task_type",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Task Type"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/workers/delete": {
+      "delete": {
+        "tags": [
+          "workers"
+        ],
+        "summary": "Delete Task",
+        "description": "Delete a worker task.",
+        "operationId": "delete_task_workers_delete_delete",
+        "parameters": [
+          {
+            "name": "task_name",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Task Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/utils/historyDB/{name}": {
+      "get": {
+        "tags": [
+          "utils"
+        ],
+        "summary": "Get Historydb",
+        "operationId": "get_historyDB_utils_historyDB__name__get",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/utils/stats": {
+      "get": {
+        "tags": [
+          "utils"
+        ],
+        "summary": "Get Dashboard Stats",
+        "description": "Aggregate statistics for the dashboard.",
+        "operationId": "get_dashboard_stats_utils_stats_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/utils/clusters/unique": {
+      "post": {
+        "tags": [
+          "utils"
+        ],
+        "summary": "Save Cluster Names",
+        "description": "Persist human-friendly names for a clustering dataset's clusters.",
+        "operationId": "save_cluster_names_utils_clusters_unique_post",
+        "parameters": [
+          {
+            "name": "dataset_name",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Dataset Name"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true,
+                "title": "Data Naming"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "utils"
+        ],
+        "summary": "Get Cluster Names",
+        "description": "Get cluster names for a dataset, falling back to the raw unique clusters.",
+        "operationId": "get_cluster_names_utils_clusters_unique_get",
+        "parameters": [
+          {
+            "name": "dataset_name",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Dataset Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/utils/tagname": {
+      "get": {
+        "tags": [
+          "utils"
+        ],
+        "summary": "Search Tagnames",
+        "description": "Search tag names from the external API.",
+        "operationId": "search_tagnames_utils_tagname_get",
+        "parameters": [
+          {
+            "name": "query",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Query"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/utils/task-types": {
+      "get": {
+        "tags": [
+          "utils"
+        ],
+        "summary": "List Task Types",
+        "description": "List supported task types.",
+        "operationId": "list_task_types_utils_task_types_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/utils/actual": {
+      "get": {
+        "tags": [
+          "utils"
+        ],
+        "summary": "Get Realtime Value",
+        "description": "Get the latest realtime value for a tag.",
+        "operationId": "get_realtime_value_utils_actual_get",
+        "parameters": [
+          {
+            "name": "tagname",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Tagname"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/utils/realtime/{tagname}": {
+      "get": {
+        "tags": [
+          "utils"
+        ],
+        "summary": "Get Realtime By Tag",
+        "description": "Get the latest realtime value for a tag (path-param variant).",
+        "operationId": "get_realtime_by_tag_utils_realtime__tagname__get",
+        "parameters": [
+          {
+            "name": "tagname",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Tagname"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/utils/config": {
+      "get": {
+        "tags": [
+          "utils"
+        ],
+        "summary": "Get Config",
+        "description": "Get the service configuration, including InfluxDB retention.",
+        "operationId": "get_config_utils_config_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "utils"
+        ],
+        "summary": "Update Config",
+        "description": "Update the service configuration and InfluxDB retention.",
+        "operationId": "update_config_utils_config_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "type": "object",
+                "title": "Data"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AnomalyRequestSchema": {
+        "properties": {
+          "dataset_name": {
+            "type": "string",
+            "title": "Dataset Name"
+          },
+          "algorithm": {
+            "type": "string",
+            "title": "Algorithm"
+          },
+          "fraction": {
+            "type": "number",
+            "title": "Fraction"
+          }
+        },
+        "type": "object",
+        "required": [
+          "dataset_name",
+          "algorithm",
+          "fraction"
+        ],
+        "title": "AnomalyRequestSchema"
+      },
+      "CreateDatasetSchema": {
+        "properties": {
+          "description": {
+            "type": "string",
+            "title": "Description",
+            "default": ""
+          },
+          "task_type": {
+            "type": "string",
+            "title": "Task Type"
+          },
+          "features": {
+            "items": {},
+            "type": "array",
+            "title": "Features"
+          },
+          "tags": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tags"
+          },
+          "target": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Target"
+          },
+          "start_date": {
+            "type": "string",
+            "title": "Start Date"
+          },
+          "end_date": {
+            "type": "string",
+            "title": "End Date"
+          },
+          "time_start": {
+            "type": "string",
+            "title": "Time Start",
+            "default": "00:00:00"
+          },
+          "time_end": {
+            "type": "string",
+            "title": "Time End",
+            "default": "23:59:00"
+          },
+          "interval": {
+            "type": "integer",
+            "title": "Interval",
+            "default": 0
+          },
+          "preprocessing": {
+            "$ref": "#/components/schemas/PreprocessingSchema"
+          },
+          "n_models": {
+            "type": "integer",
+            "title": "N Models",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "task_type",
+          "features",
+          "target",
+          "start_date",
+          "end_date"
+        ],
+        "title": "CreateDatasetSchema"
+      },
+      "DatasetHandling": {
+        "type": "string",
+        "enum": [
+          "NONE",
+          "REMOVE",
+          "MEAN",
+          "MEDIAN",
+          "MAX",
+          "MIN",
+          "NEIGHBOR_VALUE"
+        ],
+        "title": "DatasetHandling"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "InferenceRequestSchema": {
+        "properties": {
+          "dataset_name": {
+            "type": "string",
+            "title": "Dataset Name"
+          },
+          "X": {
+            "title": "X"
+          }
+        },
+        "type": "object",
+        "required": [
+          "dataset_name",
+          "X"
+        ],
+        "title": "InferenceRequestSchema"
+      },
+      "ModelTrainSchema": {
+        "properties": {
+          "dataset_name": {
+            "type": "string",
+            "title": "Dataset Name"
+          },
+          "algorithm": {
+            "type": "string",
+            "title": "Algorithm"
+          },
+          "use_this": {
+            "type": "boolean",
+            "title": "Use This"
+          }
+        },
+        "type": "object",
+        "required": [
+          "dataset_name",
+          "algorithm",
+          "use_this"
+        ],
+        "title": "ModelTrainSchema"
+      },
+      "PreprocessingSchema": {
+        "properties": {
+          "missing_handling": {
+            "$ref": "#/components/schemas/DatasetHandling",
+            "default": "NEIGHBOR_VALUE"
+          },
+          "outlier_handling": {
+            "type": "boolean",
+            "title": "Outlier Handling",
+            "default": false
+          },
+          "scale": {
+            "type": "boolean",
+            "title": "Scale",
+            "default": false
+          },
+          "dim_reduce": {
+            "type": "boolean",
+            "title": "Dim Reduce",
+            "default": false
+          },
+          "interval_finetune": {
+            "type": "integer",
+            "title": "Interval Finetune",
+            "default": 5
+          }
+        },
+        "type": "object",
+        "title": "PreprocessingSchema"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  }
+}

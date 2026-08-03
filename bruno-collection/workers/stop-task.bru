@@ -1,0 +1,19 @@
+meta {
+  name: Stop Task
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/workers/stop
+  body: none
+  auth: none
+}
+
+params:query {
+  task_name: string
+}
+
+docs {
+  Stop a worker task.
+}

@@ -1,0 +1,19 @@
+meta {
+  name: Refresh Forecast Actuals
+  type: http
+  seq: 7
+}
+
+get {
+  url: {{baseUrl}}/models/:dataset_name/forecast/get_actual
+  body: none
+  auth: none
+}
+
+params:path {
+  dataset_name: string
+}
+
+docs {
+  Refresh a time-series dataset's actual values from InfluxDB.
+}

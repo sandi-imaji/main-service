@@ -1,0 +1,23 @@
+meta {
+  name: Run Auto Anomaly
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/models/anomaly/auto
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "dataset_name": "string",
+    "algorithm": "string",
+    "fraction": 0.0
+  }
+}
+
+docs {
+  Train an anomaly model and start its worker in the background.
+}

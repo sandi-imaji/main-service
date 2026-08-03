@@ -1,0 +1,20 @@
+meta {
+  name: Change Top Model
+  type: http
+  seq: 10
+}
+
+post {
+  url: {{baseUrl}}/models/:dataset_name/change-top/:algorithm
+  body: none
+  auth: none
+}
+
+params:path {
+  dataset_name: string
+  algorithm: string
+}
+
+docs {
+  Set a dataset's top model to the given algorithm.
+}

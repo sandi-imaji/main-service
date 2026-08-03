@@ -1,0 +1,19 @@
+meta {
+  name: Forecast
+  type: ws
+  seq: 1
+}
+
+ws {
+  url: ws://localhost:8004/stream/realtime/forecast?dataset_name=TimeSeries-ac6aa0b0
+  body: ws
+  auth: none
+}
+
+body:ws {
+  name: message 1
+  type: json
+  content: '''
+  
+  '''
+}

@@ -3,8 +3,8 @@ from typing import List,Dict,Optional,Union
 from app.logger  import LOGGER_GLOBAL
 from app.database.schemas import TaskType,StatusProcess
 from app.config import Config
-from app.database.db import get_session
-from app.database.orm import Dataset
+from app.database.base import get_session
+from app.database.DB import Dataset
 from contextlib import closing
 from app import exceptions
 
@@ -23,10 +23,14 @@ def _run(text:List[str]) -> str:
 class WorkerManager:
   @staticmethod
   def get_script_path(task_type:TaskType):
-    if task_type.is_supervised(): script_path = Config.dir_app/"core"/"supervised.py"
-    elif task_type.is_unsupervised(): script_path = Config.dir_app/"core"/"unsupervised.py"
-    elif task_type.is_timeseries(): script_path = Config.dir_app/"core"/"time_series.py"
-    else: script_path = Config.dir_app/"core"/"anomaly.py"
+    # Setiap task punya file entry sendiri di service layer (core-nya murni,
+    # tidak punya main). File inilah identitas worker: sebuah worker Anomaly
+    # yang menumpang dataset Regression dikenali dari skrip yang dijalankan,
+    # bukan dari argumen tambahan yang bisa tertukar.
+    if task_type.is_supervised(): script_path = Config.dir_app/"services"/"supervised.py"
+    elif task_type.is_unsupervised(): script_path = Config.dir_app/"services"/"clustering.py"
+    elif task_type.is_timeseries(): script_path = Config.dir_app/"services"/"timeseries"/"worker.py"
+    else: script_path = Config.dir_app/"services"/"anomaly.py"
     return script_path
 
   @staticmethod
@@ -52,16 +56,11 @@ class WorkerManager:
   def create(dataset_name:str,task_type:TaskType):
     task_name = f"{dataset_name}-{str(task_type)}"
     script_path = WorkerManager.get_script_path(task_type)
+    # Argv cukup nama dataset: task type sudah tersirat dari skrip yang dipilih
+    # get_script_path.
     command = ["pm2","start",str(script_path),
               "--name",task_name,"--interpreter",sys.executable,
-              "--interpreter-args", "-u","--",dataset_name] 
-
-    # module_name = task_type.module_name
-    # command = ["pm2","start","python",              # <-- jalankan python interpreter
-    #             "--name",task_name,
-    #             "--cwd",str(Config.dir),             # <-- set working dir ke root project
-    #             "--interpreter-args",f"-u -m {module_name}",  # <-- -m flag
-    #             "--",dataset_name]
+              "--interpreter-args", "-u","--",dataset_name]
 
     _run(command)
     if task_type != TaskType.Anomaly: WorkerManager.update_flag_dataset(dataset_name,is_stop=False)

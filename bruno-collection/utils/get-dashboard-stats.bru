@@ -1,0 +1,15 @@
+meta {
+  name: Get Dashboard Stats
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/utils/stats
+  body: none
+  auth: none
+}
+
+docs {
+  Aggregate statistics for the dashboard.
+}

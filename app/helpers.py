@@ -1,32 +1,19 @@
 from app.config import Config
-import os,math
+import os
 import datetime
 import pandas as pd
 import numpy as np
 import re
 import requests as req
 from typing import List, Optional, Union, Dict, Any
-from sklearn.preprocessing import MinMaxScaler
 from sklearn.decomposition import PCA
 
-TAGNAME_PATH = Config.dir / "tagname.csv"
-TAGNAME = pd.read_csv(
-    TAGNAME_PATH) if TAGNAME_PATH.exists() else pd.DataFrame()
-
-
-def get_mapping():
-  data = {}
-  for _, v in TAGNAME.iterrows():
-    data[v["row_id"]] = v.to_dict()
-  return data
-
-def get_tagname(row_id: int):
-  tagname = get_mapping().get(row_id, "")
-  return tagname if not tagname else tagname.get("tag_name", "")
 
 def get_row_id(tagname: str,logger=None) -> str:
-  url = f"{Config.sl_host}application/api/modbus/get-point?tagname={tagname}"
-  data = req.post(url=url, verify=False, data=dict(key=Config.sl_key))
+  url = Config.sl_url("application/api/modbus/get-point")
+  data = req.post(url=url, params=dict(tagname=tagname),
+                  verify=Config.sl_verify, data=dict(key=Config.sl_key),
+                  timeout=Config.sl_timeout_long)
   if data.status_code != 200: return ""
   else:
     data_json = data.json()
@@ -38,17 +25,6 @@ def get_row_id(tagname: str,logger=None) -> str:
       if logger:logger.error(f"{message} | {tagname}")
       return ""
     return data_json["data"]["row_id"]
-    
-
-def get_curr_value(tagname: str):
-  url = f"{Config.sl_host}application/api/modbus/get-point?tagname={tagname}"
-  data = req.post(url=url, verify=False, data=dict(key=Config.sl_key),timeout=Config.sl_timeout)
-  if data.status_code != 200: return ""
-  else: return data.json()["data"]["currvalue"]
-
-
-def get_point_id(row_id: int):
-  return get_mapping().get(row_id, "").get("point_id", "")
 
 
 class DTEncoder:
@@ -219,19 +195,6 @@ class DTEncoder:
 
 
 
-def read_bytes_to_dict(fpath: str, columns: List[str]) -> List[dict]:
-  with open(fpath, "rb") as f:
-    data = f.read()
-  record_length = len(columns)
-  arr = np.frombuffer(data, dtype=np.float64)
-  num_records = len(arr) // record_length
-  resultReshape = arr[: num_records * record_length].reshape(
-      num_records, record_length
-  )
-  results = [dict(zip(columns, row)) for row in resultReshape]
-  return results
-
-
 def parse_log_line(line: str, with_module: bool = False) -> Dict[str, Any]:
   """
   Parse satu baris log menjadi dict yang sesuai dengan frontend LogViewer.
@@ -241,11 +204,14 @@ def parse_log_line(line: str, with_module: bool = False) -> Dict[str, Any]:
   if not line:
     return {}
 
-  # Pattern untuk format: [timestamp] [LEVEL] module:function:line - message
+  # Format: [timestamp] [LEVEL] [dataset] module:function:line - message
+  # `[dataset]` opsional supaya file log lama (tanpa field itu) tetap terbaca,
+  # dan `function` boleh <module> karena log di level modul memakai nama itu.
   pattern = re.compile(
       r"\[(?P<timestamp>[^\]]+)\]\s+"
       r"\[(?P<level>[A-Z]+)\]\s+"
-      r"(?P<module>[\w\.]+):(?P<function>\w+):(?P<line>\d+)\s+-\s+"
+      r"(?:\[(?P<dataset>[^\]]*)\]\s+)?"
+      r"(?P<module>[\w\.]+):(?P<function>[\w<>]+):(?P<line>\d+)\s+-\s+"
       r"(?P<message>.+)"
   )
 
@@ -255,6 +221,7 @@ def parse_log_line(line: str, with_module: bool = False) -> Dict[str, Any]:
     return {
         "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "level": "INFO",
+        "dataset": "",
         "module": "unknown",
         "function": "",
         "line": None,
@@ -285,6 +252,7 @@ def parse_log_line(line: str, with_module: bool = False) -> Dict[str, Any]:
   return {
       "timestamp": timestamp,
       "level": level,
+      "dataset": m.group("dataset") or "",
       "module": m.group("module"),
       "function": m.group("function"),
       "line": int(m.group("line")),
@@ -293,12 +261,15 @@ def parse_log_line(line: str, with_module: bool = False) -> Dict[str, Any]:
   }
 
 
-def read_logs(dataset_name: str) -> List[Dict[str, Any]]:
+def read_logs(dataset_name: str, channel: str = "main") -> List[Dict[str, Any]]:
   """
-  Digunakan untuk inisialisasi atau fallback kalau WebSocket belum connect
+  Digunakan untuk inisialisasi atau fallback kalau WebSocket belum connect.
+
+  Lokasi filenya ditentukan LogManager (satu sumber kebenaran), jadi pembaca dan
+  penulis log tidak bisa lagi menunjuk path yang berbeda.
   """
-  if dataset_name == "system": fpath = Config.dir / "logger" / "main.log"
-  else: fpath = Config.dir / "storages" / dataset_name / "logs" / "main.log"
+  from app.logger import LogManager
+  fpath = LogManager.log_path(dataset_name, channel)
 
   if not fpath.exists(): return []
 
@@ -352,29 +323,6 @@ def miss_val_handling_df(df: pd.DataFrame, logger, handling):
     return df
 
 
-def outlier_handling_df(df: pd.DataFrame, multiplier=1.5):
-  df = df.drop(columns=["dt"])
-  result = dict()
-  for key in df.columns:
-    Q1 = df[key].quantile(0.25)
-    Q2 = df[key].quantile(0.75)
-    IQR = Q2 - Q1
-    lower = Q1 - multiplier * IQR
-    upper = Q2 + multiplier * IQR
-    res = df[(df[key] < lower) | (df[key] > upper)]
-    result[key] = res
-  return result
-
-
-def write_bytes(values, fpath: str):
-  if not os.path.exists(fpath):
-    os.makedirs(fpath, exist_ok=True)
-  result = np.asarray(values, dtype=np.float64)
-  resultBytes = result.tobytes()
-  with open(fpath, "ab") as f:
-    f.write(resultBytes)
-
-
 def pca(
     X: Union[pd.DataFrame, np.ndarray], n_components: int = 2, only_obj: bool = False
 ):
@@ -387,44 +335,15 @@ def pca(
   return obj, obj.transform(X)
 
 
-def minmax(X: Union[pd.DataFrame, np.ndarray], only_obj: bool = False):
+def init_storages(name):
+  """Siapkan folder artefak sebuah dataset.
+
+  Log TIDAK di sini lagi — semuanya di `Config.log_dir` (lihat app/logger.py),
+  supaya satu perintah `rm -rf storages/<ds>` tidak ikut menghapus jejak
+  kejadiannya.
   """
-  return obj,transform values
-  """
-
-  if isinstance(X, pd.DataFrame):
-    X = X.drop(columns="dt").values if "dt" in X.columns else X.values
-  scaler = MinMaxScaler().fit(X)
-  if only_obj:
-    return scaler
-  return scaler, scaler.transform(X)
-
-
-def init_storages_dataset(name):
   path = Config.dir / "storages" / name
   os.makedirs(path, exist_ok=True)
-  os.makedirs(path / "logs", exist_ok=True)
   os.makedirs(path / "top_model", exist_ok=True)
   os.makedirs(path / "results", exist_ok=True)
-  print("Init Storages ...")
-
-
-def clean_float(val:Any):
-  if val is None: return None
-  # Handle dict (rekursif)
-  if isinstance(val, dict): return {k: clean_float(v) for k, v in val.items()}
-  # Handle list (rekursif)
-  if isinstance(val, list): return [clean_float(item) for item in val]
-
-  if hasattr(val,'item'): val = val.item()
-  if isinstance(val, float):
-    if math.isnan(val) or math.isinf(val): return None
-    return val
-  return val
-
-
-if __name__ == "__main__":
-  data = read_logs("Regression-42c81c4e")
-  print(data)
-  print(len(data))
 

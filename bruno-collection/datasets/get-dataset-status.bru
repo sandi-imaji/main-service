@@ -1,0 +1,19 @@
+meta {
+  name: Get Dataset Status
+  type: http
+  seq: 9
+}
+
+get {
+  url: {{baseUrl}}/datasets/:name/status
+  body: none
+  auth: none
+}
+
+params:path {
+  name: string
+}
+
+docs {
+  Get a dataset's processing status.
+}

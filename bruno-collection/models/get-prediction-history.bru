@@ -1,0 +1,19 @@
+meta {
+  name: Get Prediction History
+  type: http
+  seq: 16
+}
+
+get {
+  url: {{baseUrl}}/models/:dataset_name/history
+  body: none
+  auth: none
+}
+
+params:path {
+  dataset_name: TimeSeries-f6fef3e6
+}
+
+docs {
+  Get a dataset's prediction history (from InfluxDB, or clusters for clustering).
+}

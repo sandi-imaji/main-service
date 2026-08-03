@@ -1,0 +1,15 @@
+meta {
+  name: List Tasks
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/workers/tasks
+  body: none
+  auth: none
+}
+
+docs {
+  List all worker tasks.
+}

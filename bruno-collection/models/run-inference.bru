@@ -1,0 +1,22 @@
+meta {
+  name: Run Inference
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/models/inference
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "dataset_name": "string",
+    "X": null
+  }
+}
+
+docs {
+  Run inference on a dataset with an explicit input payload.
+}

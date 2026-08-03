@@ -1,265 +1,168 @@
-"""
-Integration tests for pull module.
-Uses real tagnames from tests/tagname.csv.
-"""
+"""app.pull — REAL integration tests against the live SL API.
 
+No network mocking: these actually call the SL tag-search / get-history endpoints
+using the credentials in Config. A real tagname is discovered at runtime via
+`query_tagnames`, then fed to the other calls (so nothing is hardcoded to a tag
+that might disappear).
+
+Requires a reachable SL API. If it is unreachable the whole module is SKIPPED
+(not failed), so the rest of the suite stays green offline. Run just these with:
+    pytest -m integration
+Values are live, so assertions check shape/type — never exact numbers.
+
+The pure helpers (PullDate, _retry_budget) need no network and live here too.
+"""
+import asyncio
+import datetime
+
+import pandas as pd
 import pytest
-import random
-import pandas as pd,time
-from pathlib import Path
-from app.pull import (
-    get_realtime,
-    async_get_realtime,
-    pull_realtime,
-    async_pull_realtime,
-    get_history,
-    async_get_history,
-    query_tagnames
-)
-from app.pull import PullDate
+
+from app import pull
 from app.helpers import DTEncoder
 from app.logger import Logger
 
+pytestmark = pytest.mark.integration
 
-def load_test_tagnames():
-  """Load tagnames from CSV file for testing."""
-  csv_path = Path(__file__).parent /"tagname.csv"
-  df = pd.read_csv(csv_path)
-  return df["tagname"].tolist()
+SEARCH_QUERY = "CRAH-2DH2.1-*SUPPLY"       # from the original scratch script
+logger = Logger("test-pull")
 
-# Load tagnames once for all tests
-TEST_TAGNAMES = load_test_tagnames()
 
+def _api_reachable() -> bool:
+  try:
+    return bool(pull.query_tagnames(SEARCH_QUERY, logger=logger))
+  except Exception:
+    return False
+
+
+if not _api_reachable():
+  pytest.skip("SL API unreachable / no tags for probe query", allow_module_level=True)
+
+
+@pytest.fixture(scope="module")
+def tags():
+  """Real tags discovered from the live search API: [{tagname,row_id,currvalue}]."""
+  found = pull.query_tagnames(SEARCH_QUERY, logger=logger)
+  assert found, "probe query returned no tags"
+  return found
+
+
+@pytest.fixture(scope="module")
+def one_tag(tags):
+  return tags[0]
+
+
+# --- pure helpers (no network) ----------------------------------------------
+
+class TestRetryBudget:
+  def test_below_one_is_forced_to_one(self):
+    assert pull._retry_budget(0) == 1
+    assert pull._retry_budget(-3) == 1
+
+  def test_valid_is_unchanged(self):
+    assert pull._retry_budget(3) == 3
+
+
+class TestPullDate:
+  def test_is_today(self):
+    assert pull.PullDate(current_date=DTEncoder.now_str(), time_start="00:00:00").is_today() is True
+    assert pull.PullDate(current_date="19000101", time_start="00:00:00").is_today() is False
+
+  def test_norm_time_pads(self):
+    assert pull.PullDate.norm_time("9:5", "00:00:00") == "09:05:00"
+    assert pull.PullDate.norm_time(None, "23:59:00") == "23:59:00"
+
+  def test_from_str_with_times_is_normalised(self):
+    pd_ = pull.PullDate.from_str("20200101", time_start="9:5", time_end="17:0")
+    assert (pd_.time_start, pd_.time_end) == ("09:05:00", "17:00:00")
+
+  def test_time_accessors_return_time_objects(self):
+    pd_ = pull.PullDate(current_date="20200101", time_start="09:05:00", time_end="17:30:00")
+    assert pd_.time_start_t() == datetime.time(9, 5, 0)
+    assert pd_.time_end_t() == datetime.time(17, 30, 0)
+
+
+# --- query_tagnames (the requested focus) — REAL ----------------------------
+
+class TestQueryTagnames:
+  def test_returns_real_tags(self, tags):
+    assert len(tags) > 0
+    for t in tags:
+      assert set(t) >= {"tagname", "row_id", "currvalue"}
+      assert isinstance(t["tagname"], str) and t["tagname"]
+      assert isinstance(t["currvalue"], float)
+
+  def test_unknown_query_returns_empty(self):
+    assert pull.query_tagnames("__no_such_tag_zzz_12345__", logger=logger) == []
+
+
+# --- get_realtime — REAL ----------------------------------------------------
 
 class TestGetRealtime:
-  """Tests for get_realtime function with real tagnames."""
-
-  def test_get_realtime_single_tag(self):
-    """Test getting realtime value for a single tag."""
-    if not TEST_TAGNAMES:
-      pytest.skip("No tagnames available for testing")
-
-    tagname = random.choice(TEST_TAGNAMES)
-    logger = Logger("test_pull")
-
-    try:
-      result = get_realtime(tagname, logger=logger)
-      assert isinstance(result, float)
-      print(f"✓ get_realtime('{tagname}') = {result}")
-    except Exception as e:
-      pytest.fail(f"Failed to get realtime for {tagname}: {e}")
-
-  def test_get_realtime_with_retries(self):
-    """Test get_realtime with retry mechanism."""
-    if not TEST_TAGNAMES:
-      pytest.skip("No tagnames available for testing")
-
-    tagname = random.choice(TEST_TAGNAMES)
-    logger = Logger("test_pull")
-
-    result = get_realtime(tagname, logger=logger,
-                          max_retries=3, retry_delay=1.0)
-    assert isinstance(result, float)
-    print(f"✓ get_realtime with retries('{tagname}') = {result}")
+  def test_returns_float_for_real_tag(self, one_tag):
+    value = pull.get_realtime(one_tag["tagname"], logger=logger)
+    assert isinstance(value, float)
 
 
-class TestAsyncGetRealtime:
-  """Tests for async_get_realtime function."""
-
-  @pytest.mark.asyncio
-  async def test_async_get_realtime_single_tag(self):
-    """Test async realtime fetch for a single tag."""
-    if not TEST_TAGNAMES:
-      pytest.skip("No tagnames available for testing")
-
-    tagname = random.choice(TEST_TAGNAMES)
-    logger = Logger("test_pull")
-
-    try:
-      result = await async_get_realtime(tagname, logger=logger)
-      assert isinstance(result, float)
-      print(f"✓ async_get_realtime('{tagname}') = {result}")
-    except Exception as e:
-      pytest.fail(f"Failed to get async realtime for {tagname}: {e}")
-
-  @pytest.mark.asyncio
-  async def test_async_get_realtime_multiple_tags(self):
-    """Test async realtime fetch for multiple tags concurrently."""
-    if len(TEST_TAGNAMES) < 3:
-      pytest.skip("Need at least 3 tagnames for this test")
-
-    tagnames = random.sample(TEST_TAGNAMES, k=3)
-    logger = Logger("test_pull")
-
-    import asyncio
-
-    tasks = [async_get_realtime(tag, logger=logger) for tag in tagnames]
-    results = await asyncio.gather(*tasks, return_exceptions=True)
-    print(results)
-
-    for i, result in enumerate(results):
-      if isinstance(result, Exception):
-        print(f"✗ Tag {tagnames[i]} failed: {result}")
-      else:
-        assert isinstance(result, float)
-        print(f"✓ async_get_realtime('{tagnames[i]}') = {result}")
-
-
-class TestPullRealtime:
-  """Tests for pull_realtime function."""
-
-  def test_pull_realtime_multiple_tags(self):
-    """Test pulling realtime values for multiple tags."""
-    if len(TEST_TAGNAMES) < 3:
-      pytest.skip("Need at least 3 tagnames for this test")
-
-    tagnames = random.sample(TEST_TAGNAMES, k=5)
-    logger = Logger("test_pull")
-
-    results = pull_realtime(tagnames, logger=logger)
-
-    assert len(results) == len(tagnames)
-    for i, (tag, value) in enumerate(zip(tagnames, results)):
-      if value is not None:
-        assert isinstance(value, float)
-        print(f"✓ pull_realtime[{i}]('{tag}') = {value}")
-      else:
-        print(f"⚠ pull_realtime[{i}]('{tag}') = None (failed)")
-
-
-class TestAsyncPullRealtime:
-  """Tests for async_pull_realtime function."""
-
-  @pytest.mark.asyncio
-  async def test_async_pull_realtime_multiple_tags(self):
-    """Test async pulling realtime values for multiple tags."""
-    if len(TEST_TAGNAMES) < 3:
-      pytest.skip("Need at least 3 tagnames for this test")
-
-    tagnames = random.sample(TEST_TAGNAMES, k=5)
-    logger = Logger("test_pull")
-
-    results = await async_pull_realtime(tagnames, logger=logger)
-
-    assert len(results) == len(tagnames)
-    success_count = sum(1 for r in results if r is not None)
-    print(f"✓ async_pull_realtime: {success_count}/{len(tagnames)} successful")
-
-    for tag, value in zip(tagnames, results):
-      if value is not None:
-        assert isinstance(value, float)
-
+# --- get_history — REAL -----------------------------------------------------
 
 class TestGetHistory:
-  """Tests for get_history function."""
+  def test_today_returns_dataframe_shape(self, one_tag):
+    df = pull.get_history(
+        one_tag["tagname"], DTEncoder.now_str(),
+        to_dataframe=True, row_id=one_tag["row_id"], logger=logger,
+    )
+    assert isinstance(df, pd.DataFrame)
+    assert list(df.columns) == ["dt", one_tag["tagname"]]
+    if not df.empty:
+      assert pd.api.types.is_datetime64_any_dtype(df["dt"])
 
-  def test_get_history_single_tag(self):
-    """Test getting historical data for a single tag."""
-    if not TEST_TAGNAMES:
-      pytest.skip("No tagnames available for testing")
 
-    tagname = random.choice(TEST_TAGNAMES)
-    logger = Logger("test_pull")
+# --- pull_realtime — REAL ---------------------------------------------------
 
-    # Get yesterday's date in YYYYMMDD format
-    from datetime import datetime, timedelta
+class TestPullRealtime:
+  def test_multiple_tags(self, tags):
+    names = [t["tagname"] for t in tags[:2]]
+    values = pull.pull_realtime(names, logger=logger)
+    assert len(values) == len(names)
+    for v in values:
+      assert v is None or isinstance(v, float)
 
-    yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y%m%d")
 
-    try:
-      result = get_history(
-          tagname,
-          current_date=yesterday,
-          time_start="00:00:00",
-          time_end="01:00:00",
-          interval=300,
-          to_dataframe=True,
-          logger=logger,
-      )
+# --- pull_history_nday — REAL -----------------------------------------------
 
-      assert isinstance(result, pd.DataFrame)
-      print(f"✓ get_history('{tagname}') returned {len(result)} rows")
-    except Exception as e:
-      print(f"⚠ get_history('{tagname}') failed: {e}")
-      # Don't fail the test if history is not available
+class TestPullHistoryNday:
+  def test_recent_days_returns_frame(self, one_tag):
+    # pass tags mapping so the ~7s get_row_id lookup is skipped
+    df = pull.pull_history_nday(
+        1, [one_tag["tagname"]], logger=logger,
+        tags={one_tag["tagname"]: one_tag["row_id"]},
+    )
+    assert isinstance(df, pd.DataFrame)
+    assert "dt" in df.columns and one_tag["tagname"] in df.columns
+
+
+# --- async variants — REAL --------------------------------------------------
+
+class TestAsyncGetRealtime:
+  async def test_returns_float(self, one_tag):
+    value = await pull.async_get_realtime(one_tag["tagname"], logger=logger)
+    assert isinstance(value, float)
 
 
 class TestAsyncGetHistory:
-  """Tests for async_get_history function."""
+  async def test_today_returns_dataframe(self, one_tag):
+    # async path resolves row_id from the tagname itself (real get_row_id call)
+    df = await pull.async_get_history(
+        one_tag["tagname"], DTEncoder.now_str(), to_dataframe=True, logger=logger,
+    )
+    assert isinstance(df, pd.DataFrame)
+    assert list(df.columns) == ["dt", one_tag["tagname"]]
 
-  @pytest.mark.asyncio
-  async def test_async_get_history_single_tag(self):
-    """Test async historical data fetch for a single tag."""
-    if not TEST_TAGNAMES:
-      pytest.skip("No tagnames available for testing")
 
-    tagname = random.choice(TEST_TAGNAMES)
-    logger = Logger("test_pull")
-
-    from datetime import datetime, timedelta
-
-    yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y%m%d")
-
-    try:
-      result = await async_get_history(
-          tagname,
-          current_date=yesterday,
-          time_start="00:00:00",
-          time_end="01:00:00",
-          interval=300,
-          to_dataframe=True,
-          logger=logger,
-      )
-
-      assert isinstance(result, pd.DataFrame)
-      print(f"✓ async_get_history('{tagname}') returned {len(result)} rows")
-    except Exception as e:
-      print(f"⚠ async_get_history('{tagname}') failed: {e}")
-
-class TestPullHistory:
-  """Test Sync Pull historical data fetch for a multiple tag."""
-  if not TEST_TAGNAMES:
-    pytest.skip("No tagnames available for testing")
-
-  start_date = None
-  end_date = None
-
-class TestQueryTagnames:
-  def test_query_tagname(self):
-    tagname = "CRAH*SUPPLY"
-    tagnames = query_tagnames(tagname)
-    assert tagnames, f"Tagname : {tagname} is empty!"
-    assert len(tagnames),f"Tagname : {tagname} is empty!"
-    print(f"n tagnames : {len(tagnames)}")
-
-class TestPerformanceComparison:
-  """Performance tests comparing sync vs async operations."""
-
-  @pytest.mark.asyncio
-  async def test_sync_vs_async_performance(self):
-    """Compare performance of sync vs async operations."""
-    if len(TEST_TAGNAMES) < 5:
-      pytest.skip("Need at least 5 tagnames for performance test")
-
-    tagnames = random.sample(TEST_TAGNAMES, k=5)
-    logger = Logger("test_pull")
-
-    # Sync version
-    start = time.time()
-    sync_results = pull_realtime(tagnames, logger=logger)
-    sync_duration = time.time() - start
-
-    # Async version
-    start = time.time()
-    async_results = await async_pull_realtime(tagnames, logger=logger)
-    async_duration = time.time() - start
-
-    print(f"\n📊 Performance Comparison (5 tags):")
-    print(f"   Sync:  {sync_duration:.3f}s")
-    print(f"   Async: {async_duration:.3f}s")
-    print( f"   Improvement: {((sync_duration - async_duration) / sync_duration * 100):.1f}%")
-    # Both should have same number of results
-    assert len(sync_results) == len(async_results)
-
-if __name__ == "__main__":
-  pytest.main([__file__, "-v", "-s"])
+class TestAsyncPullRealtime:
+  async def test_returns_tag_value_map(self, one_tag):
+    out = await pull.async_pull_realtime([one_tag["tagname"]])
+    assert one_tag["tagname"] in out
+    assert isinstance(out[one_tag["tagname"]], list)
+    assert isinstance(out[one_tag["tagname"]][0], float)

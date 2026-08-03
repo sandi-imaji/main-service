@@ -1,0 +1,19 @@
+meta {
+  name: Get Dataset Logs
+  type: http
+  seq: 13
+}
+
+get {
+  url: {{baseUrl}}/datasets/:name/logs
+  body: none
+  auth: none
+}
+
+params:path {
+  name: string
+}
+
+docs {
+  Get a dataset's logs.
+}

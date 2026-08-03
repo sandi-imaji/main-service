@@ -1,0 +1,19 @@
+meta {
+  name: Search Tagnames
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{baseUrl}}/utils/tagname?query=CRAH-2DH2.1-*``
+  body: none
+  auth: none
+}
+
+params:query {
+  query: CRAH-2DH2.1-*``
+}
+
+docs {
+  Search tag names from the external API.
+}

@@ -3,27 +3,43 @@ Base route patterns and utilities
 """
 
 import asyncio
+import inspect
 from functools import wraps
 from typing import TypeVar, Callable, Any
-from fastapi import HTTPException
 from app.logger import Logger
 from app.exceptions import handle_exception
+
+from app.database.DB import Dataset,ModelML
+from app.exceptions import NotFoundException
 
 T = TypeVar("T")
 
 
+def _without_logger(sig: inspect.Signature) -> inspect.Signature:
+  """Drop the injected `logger` parameter so FastAPI never sees it (otherwise it
+  leaks into the OpenAPI schema as a stray query parameter)."""
+  params = [p for name, p in sig.parameters.items() if name != "logger"]
+  return sig.replace(parameters=params)
+
+
 def with_logging(operation_name: str):
-  """Decorator to add logging to route handlers"""
+  """Decorator to add logging to route handlers.
+
+  Injects a `Logger` as the handler's `logger` kwarg, but hides that parameter
+  from the handler's public signature so it does not surface in OpenAPI.
+  """
 
   def decorator(func: Callable[..., T]) -> Callable[..., T]:
+    def _inject_logger(kwargs):
+      if not kwargs.get("logger"):
+        # handlers name their path param `name` or `dataset_name`.
+        dataset_name = kwargs.get("dataset_name") or kwargs.get("name", "")
+        kwargs["logger"] = Logger(dataset_name)
+      return kwargs["logger"]
+
     @wraps(func)
     async def async_wrapper(*args, **kwargs):
-      # Create logger if not provided
-      if not kwargs.get("logger"):
-        dataset_name = kwargs.get("dataset_name", "")
-        kwargs["logger"] = Logger(dataset_name)
-      logger = kwargs["logger"]
-
+      logger = _inject_logger(kwargs)
       logger.info(f"Starting {operation_name}...")
       try:
         result = await func(*args, **kwargs)
@@ -35,12 +51,7 @@ def with_logging(operation_name: str):
 
     @wraps(func)
     def sync_wrapper(*args, **kwargs):
-      # Create logger if not provided
-      if not kwargs.get("logger"):
-        dataset_name = kwargs.get("dataset_name", "")
-        kwargs["logger"] = Logger(dataset_name)
-      logger = kwargs["logger"]
-
+      logger = _inject_logger(kwargs)
       logger.info(f"Starting {operation_name}...")
       try:
         result = func(*args, **kwargs)
@@ -50,7 +61,10 @@ def with_logging(operation_name: str):
         logger.error(f"{operation_name} failed: {str(e)}")
         raise handle_exception(e, logger)
 
-    return async_wrapper if asyncio.iscoroutinefunction(func) else sync_wrapper
+    wrapper = async_wrapper if asyncio.iscoroutinefunction(func) else sync_wrapper
+    # FastAPI reads the signature to build params/OpenAPI — hide `logger`.
+    wrapper.__signature__ = _without_logger(inspect.signature(func))
+    return wrapper
 
   return decorator
 
@@ -110,8 +124,6 @@ def get_dataset_or_404(name: str, db) -> "Dataset":
   Raises:
     NotFoundException: If dataset not found
   """
-  from app.database.orm import Dataset
-  from app.exceptions import NotFoundException
 
   dataset = Dataset.get_by_name(name, db)
   if not dataset:
@@ -133,8 +145,6 @@ def get_model_or_404(name: str, db) -> "ModelML":
   Raises:
     NotFoundException: If model not found
   """
-  from app.database.orm import ModelML
-  from app.exceptions import NotFoundException
 
   model = ModelML.get_by_name(name, db)
   if not model:

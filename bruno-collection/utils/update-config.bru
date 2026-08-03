@@ -1,0 +1,19 @@
+meta {
+  name: Update Config
+  type: http
+  seq: 10
+}
+
+post {
+  url: {{baseUrl}}/utils/config
+  body: json
+  auth: none
+}
+
+body:json {
+  {}
+}
+
+docs {
+  Update the service configuration and InfluxDB retention.
+}

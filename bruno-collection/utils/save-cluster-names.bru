@@ -1,0 +1,23 @@
+meta {
+  name: Save Cluster Names
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/utils/clusters/unique
+  body: json
+  auth: none
+}
+
+params:query {
+  dataset_name: string
+}
+
+body:json {
+  {}
+}
+
+docs {
+  Persist human-friendly names for a clustering dataset's clusters.
+}

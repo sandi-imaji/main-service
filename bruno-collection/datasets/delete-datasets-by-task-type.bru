@@ -1,0 +1,19 @@
+meta {
+  name: Delete Datasets By Task Type
+  type: http
+  seq: 6
+}
+
+delete {
+  url: {{baseUrl}}/datasets/filter/:task_type
+  body: none
+  auth: none
+}
+
+params:path {
+  task_type: string
+}
+
+docs {
+  Delete all datasets of a given task type.
+}

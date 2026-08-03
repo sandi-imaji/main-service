@@ -1,0 +1,15 @@
+meta {
+  name: Get Config
+  type: http
+  seq: 9
+}
+
+get {
+  url: {{baseUrl}}/utils/config
+  body: none
+  auth: none
+}
+
+docs {
+  Get the service configuration, including InfluxDB retention.
+}

@@ -1,0 +1,15 @@
+meta {
+  name: List Active Datasets
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/datasets/active
+  body: none
+  auth: none
+}
+
+docs {
+  List datasets with their task type (and cluster names for clustering).
+}

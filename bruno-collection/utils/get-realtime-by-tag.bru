@@ -1,0 +1,15 @@
+meta {
+  name: Get Realtime By Tag
+  type: http
+  seq: 8
+}
+
+get {
+  url: {{baseUrl}}/utils/realtime/CRAH-2DH2.1-RETURN_AIR_HUMIDITY
+  body: none
+  auth: none
+}
+
+docs {
+  Get the latest realtime value for a tag (path-param variant).
+}

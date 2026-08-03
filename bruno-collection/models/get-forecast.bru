@@ -1,0 +1,19 @@
+meta {
+  name: Get Forecast
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{baseUrl}}/models/:dataset_name/forecast
+  body: none
+  auth: none
+}
+
+params:path {
+  dataset_name: string
+}
+
+docs {
+  Get a time-series forecast, refreshing the model if it is expired.
+}

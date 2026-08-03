@@ -1,0 +1,19 @@
+meta {
+  name: Clean Model Results
+  type: http
+  seq: 19
+}
+
+delete {
+  url: {{baseUrl}}/models/:dataset_name/results
+  body: none
+  auth: none
+}
+
+params:path {
+  dataset_name: string
+}
+
+docs {
+  Clean a dataset's inference results.
+}

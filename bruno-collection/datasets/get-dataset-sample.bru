@@ -1,0 +1,19 @@
+meta {
+  name: Get Dataset Sample
+  type: http
+  seq: 10
+}
+
+get {
+  url: {{baseUrl}}/datasets/:name/sample
+  body: none
+  auth: none
+}
+
+params:path {
+  name: string
+}
+
+docs {
+  Get a random sample of rows from a dataset.
+}

@@ -1,0 +1,19 @@
+meta {
+  name: Get Dataset
+  type: http
+  seq: 7
+}
+
+get {
+  url: {{baseUrl}}/datasets/:name
+  body: none
+  auth: none
+}
+
+params:path {
+  name: string
+}
+
+docs {
+  Get a dataset by name, including its worker status.
+}

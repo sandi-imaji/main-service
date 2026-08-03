@@ -1,0 +1,38 @@
+meta {
+  name: Create Dataset
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/datasets
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "description": "",
+    "task_type": "string",
+    "features": [],
+    "tags": {},
+    "target": "string",
+    "start_date": "string",
+    "end_date": "string",
+    "time_start": "00:00:00",
+    "time_end": "23:59:00",
+    "interval": 0,
+    "preprocessing": {
+      "missing_handling": "NONE",
+      "outlier_handling": false,
+      "scale": false,
+      "dim_reduce": false,
+      "interval_finetune": 5
+    },
+    "n_models": 0
+  }
+}
+
+docs {
+  Create a new dataset and start pulling its data in the background.
+}

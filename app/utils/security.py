@@ -55,14 +55,12 @@ def safe_path_join(base: Path, *components: str) -> Path:
   Safely join path components and validate result is within base directory.
 
   Args:
-      base: Base directory path
-      components: Path components to join
+    base: Base directory path
+    components: Path components to join
 
-  Returns:
-      Resolved path that is guaranteed to be within base directory
+  Returns: Resolved path that is guaranteed to be within base directory
 
-  Raises:
-      HTTPException: If resulting path is outside base directory
+  Raises: HTTPException: If resulting path is outside base directory
   """
   # Resolve base path
   base = base.resolve()

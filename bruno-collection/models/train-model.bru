@@ -1,0 +1,23 @@
+meta {
+  name: Train Model
+  type: http
+  seq: 9
+}
+
+post {
+  url: {{baseUrl}}/models/train
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "dataset_name": "string",
+    "algorithm": "string",
+    "use_this": false
+  }
+}
+
+docs {
+  Train a single model in the background.
+}

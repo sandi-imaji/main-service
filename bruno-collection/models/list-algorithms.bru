@@ -1,0 +1,19 @@
+meta {
+  name: List Algorithms
+  type: http
+  seq: 12
+}
+
+get {
+  url: {{baseUrl}}/models/algorithms/:task_type
+  body: none
+  auth: none
+}
+
+params:path {
+  task_type: string
+}
+
+docs {
+  List available algorithms for a task type.
+}

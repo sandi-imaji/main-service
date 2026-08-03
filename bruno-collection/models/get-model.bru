@@ -1,0 +1,19 @@
+meta {
+  name: Get Model
+  type: http
+  seq: 18
+}
+
+get {
+  url: {{baseUrl}}/models/:model_name
+  body: none
+  auth: none
+}
+
+params:path {
+  model_name: string
+}
+
+docs {
+  Get a model by name.
+}

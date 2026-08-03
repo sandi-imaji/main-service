@@ -1,0 +1,19 @@
+meta {
+  name: Run Auto Inference
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/models/auto-inference
+  body: none
+  auth: none
+}
+
+params:query {
+  dataset_name: string
+}
+
+docs {
+  Run inference using a dataset's top model.
+}

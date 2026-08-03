@@ -1,0 +1,20 @@
+meta {
+  name: Stop Task By Dataset
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}/workers/stop-by-dataset
+  body: none
+  auth: none
+}
+
+params:query {
+  dataset_name: string
+  task_type: string
+}
+
+docs {
+  Stop a worker task identified by dataset name and task type.
+}
